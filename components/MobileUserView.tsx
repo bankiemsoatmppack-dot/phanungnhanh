@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User as AppUser, MobileTask, ChatMessage } from '../types';
 import { MOCK_TASKS, MOCK_MOBILE_CHAT } from '../constants';
@@ -151,7 +152,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout }) => {
   // View: CHAT DETAIL
   if (selectedTask) {
     return (
-      <div className="flex flex-col h-screen bg-gray-100">
+      <div className="flex flex-col h-[100dvh] bg-gray-100">
         {/* Header */}
         <div className="bg-[#0060AF] text-white p-4 flex items-center justify-between shadow-md">
            <div className="flex items-center gap-3 overflow-hidden">
@@ -217,8 +218,8 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout }) => {
            ))}
         </div>
 
-        {/* Input Area */}
-        <div className="bg-white p-3 border-t border-gray-200 flex items-center gap-3">
+        {/* Input Area with Extra Bottom Padding for Mobile Nav Bar */}
+        <div className="bg-white p-3 pb-8 border-t border-gray-200 flex items-center gap-3">
            <input 
               type="file" 
               multiple 
@@ -261,7 +262,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout }) => {
 
   // View: HOME / LIST
   return (
-    <div className="flex flex-col h-screen bg-white relative">
+    <div className="flex flex-col h-[100dvh] bg-white relative">
       {/* Header */}
       <div className="bg-[#0060AF] text-white p-4 shadow-md sticky top-0 z-10">
         <div className="flex justify-between items-center mb-4">
@@ -387,7 +388,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout }) => {
       {/* Floating Action Button */}
       <button 
         onClick={() => setIsCreateModalOpen(true)}
-        className="absolute bottom-6 right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg shadow-blue-500/40 flex items-center justify-center hover:bg-blue-700 transition-transform active:scale-95 z-20"
+        className="absolute bottom-10 right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg shadow-blue-500/40 flex items-center justify-center hover:bg-blue-700 transition-transform active:scale-95 z-20"
         title="Tạo phiếu mới"
       >
         <Plus size={32} />
