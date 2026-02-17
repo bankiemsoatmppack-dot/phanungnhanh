@@ -1,0 +1,273 @@
+
+import { Document, ChatMessage, ChartDataPoint, Employee, MobileTask } from './types';
+
+export const MOCK_EMPLOYEES: Employee[] = [
+  { id: '1', stt: 1, name: 'Nguyễn Văn A', username: 'NV001', department: 'IN', status: 'active', createdAt: '20/10/2023' },
+  { id: '2', stt: 2, name: 'Trần Thị B', username: 'NV002', department: 'KHO', status: 'active', createdAt: '21/10/2023' },
+  { id: '3', stt: 3, name: 'Lê Văn C', username: 'NV003', department: 'KCS', status: 'inactive', createdAt: '22/10/2023' },
+  { id: '4', stt: 4, name: 'Phạm Thị D', username: 'NV004', department: 'SX', status: 'active', createdAt: '23/10/2023' },
+  { id: '5', stt: 5, name: 'Hoàng Văn E', username: 'NV005', department: 'GIAO NHẬN', status: 'active', createdAt: '24/10/2023' },
+];
+
+export const MOCK_TASKS: MobileTask[] = [
+  {
+    id: '1',
+    title: 'Thùng Tiger Crystal 24 lon 330ml',
+    sender: 'HEINEKEN VIETNAM',
+    sku: 'SKU-TIGER-CRYSTAL-24',
+    code: 'LSX-2023-11-001',
+    date: '20/11/2023',
+    status: 'completed',
+    notificationCount: 3,
+    isMyTask: true,
+    type: 'folder'
+  },
+  {
+    id: '2',
+    title: 'Thùng Heineken Silver 24 lon cao',
+    sender: 'HEINEKEN VIETNAM',
+    sku: 'SKU-KEN-SILVER-24',
+    code: 'LSX-2023-11-008',
+    date: '21/11/2023',
+    status: 'completed',
+    notificationCount: 5,
+    isMyTask: true,
+    type: 'folder'
+  },
+  {
+    id: '3',
+    title: 'Thùng OMO Matic 3kg',
+    sender: 'UNILEVER',
+    sku: 'SKU-OMO-3KG',
+    code: 'LSX-2023-11-020',
+    date: '22/11/2023',
+    status: 'completed',
+    notificationCount: 0,
+    isMyTask: false,
+    type: 'folder'
+  },
+  {
+    id: '4',
+    title: 'Thùng Larue Biere Xuất Khẩu',
+    sender: 'HEINEKEN VIETNAM',
+    sku: 'SKU-LARUE-EX-12',
+    code: 'LSX-2023-11-005',
+    date: '18/11/2023',
+    status: 'completed',
+    notificationCount: 0,
+    isMyTask: false,
+    type: 'folder'
+  },
+  {
+    id: '5',
+    title: 'Thùng Pepsi Cola 330ml x 24',
+    sender: 'PEPSICO',
+    sku: 'SKU-PEP-STD-24',
+    code: 'LSX-2023-11-012',
+    date: '15/11/2023',
+    status: 'completed',
+    notificationCount: 0,
+    isMyTask: false,
+    type: 'folder'
+  },
+   {
+    id: '6',
+    title: 'Hộp quà Tết 7UP - Lốc 6',
+    sender: 'PEPSICO',
+    sku: 'SKU-7UP-TET-06',
+    code: 'LSX-2023-10-099',
+    date: '25/10/2023',
+    status: 'completed',
+    notificationCount: 0,
+    isMyTask: false,
+    type: 'folder'
+  }
+];
+
+export const MOCK_MOBILE_CHAT: ChatMessage[] = [
+  { id: '1', sender: 'Client - Anh Nam', role: 'Client', avatar: 'https://images.unsplash.com/photo-1542206395-9feb3edaa68d?w=100&h=100&fit=crop', text: 'Em kiểm tra lại mã màu Pantone xanh Tiger nhé, hơi đậm.', timestamp: '09:00 AM', isMe: false },
+  { id: '2', sender: 'Bạn', role: 'Bạn', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop', text: 'Dạ em đang cho test lại bản in mẫu.', timestamp: '09:15 AM', isMe: true },
+  { id: '3', sender: 'Quản lý', role: 'Quản lý', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop', text: '@NV001 Chú ý kiểm tra kỹ phần chồng màu nhé.', timestamp: '09:30 AM', isMe: false },
+];
+
+export const MOCK_DOCUMENTS: Document[] = [
+  {
+    id: '1',
+    title: 'Thùng Tiger Crystal 24 lon 330ml',
+    abstract: 'Thùng carton 3 lớp, in offset chất lượng cao, cán màng bóng.',
+    code: 'SKU-TIGER-CRYSTAL-24',
+    productionOrder: 'PO-2023-11-005',
+    date: '20/11/2023',
+    sender: 'HEINEKEN VIETNAM',
+    status: 'processing',
+    urgency: 'urgent',
+    type: 'incoming',
+    attachmentName: 'TK_Tiger_Crystal_v12.pdf',
+    department: 'Phòng Thiết Kế',
+    handler: 'Nguyễn Thành Nam',
+    specs: {
+      dimensions: '300 x 220 x 180 mm',
+      material: 'Giấy Duplex 250 + Sóng E',
+      flute: 'Sóng E',
+      printTech: 'In Offset 4 màu + 1 nhũ',
+      colors: ['Xanh Tiger', 'Bạc', 'Trắng'],
+      netWeight: '320g'
+    },
+    defects: [
+      { 
+        id: '1', date: '01/01/2026', productionOrder: 'PO-2023-11-005', 
+        song: 'Hở Nắp', songImages: ['https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=50&h=50&fit=crop'], 
+        in: '', inImages: [], 
+        thanhPham: '', thanhPhamImages: [], 
+        kho: '', khoImages: [], 
+        solution: 'Dán lại keo' 
+      },
+      { 
+        id: '2', date: '02/01/2026', productionOrder: 'PO-2023-11-005', 
+        song: '', songImages: [], 
+        in: 'Màu nhạt', inImages: [], 
+        thanhPham: '', thanhPhamImages: [], 
+        kho: '', khoImages: [], 
+        solution: 'Tăng lượng mực' 
+      },
+      { 
+        id: '3', date: '03/01/2026', productionOrder: 'PO-2023-11-005', 
+        song: '', songImages: [], 
+        in: '', inImages: [], 
+        thanhPham: 'Bế lỗi', thanhPhamImages: [], 
+        kho: '', khoImages: [], 
+        solution: 'Chỉnh khuôn bế' 
+      },
+    ],
+    specLogs: [
+       {
+           id: 's1', date: '01/01/2026', productionOrder: 'PO-2023-11-005', 
+           content: 'Kiểm tra kích thước sau bế: 300x220mm (+/- 1mm)',
+           result: 'Đạt'
+       }
+    ],
+    approvalItems: []
+  },
+  {
+    id: '2',
+    title: 'Thùng Heineken Silver 24 lon cao',
+    abstract: 'Thùng tiêu chuẩn xuất khẩu, chống thấm, chịu lực cao.',
+    code: 'SKU-KEN-SILVER-24',
+    productionOrder: 'PO-2023-12-010',
+    date: '21/11/2023',
+    sender: 'HEINEKEN VIETNAM',
+    status: 'approved',
+    urgency: 'normal',
+    type: 'outgoing',
+    department: 'Phòng Kỹ Thuật',
+    handler: 'Trần Thị B',
+    specs: {
+      dimensions: '310 x 230 x 190 mm',
+      material: 'Giấy Kraft nâu, 5 lớp',
+      flute: 'Sóng BC',
+      printTech: 'Flexo 3 màu',
+      colors: ['Xanh Heineken', 'Đỏ'],
+      netWeight: '450g'
+    },
+    defects: [],
+    specLogs: []
+  },
+  {
+    id: '3',
+    title: 'Thùng Larue Biere Xuất Khẩu',
+    abstract: 'Mẫu thiết kế mới cho dịp Tết 2024, hình ảnh con rồng.',
+    code: 'SKU-LARUE-EX-12',
+    productionOrder: 'PO-2023-11-099',
+    date: '18/11/2023',
+    sender: 'HEINEKEN VIETNAM',
+    status: 'pending',
+    urgency: 'normal',
+    type: 'internal',
+    department: 'Ban Giám Đốc',
+    handler: 'Lê Văn C',
+    specs: {
+      dimensions: '280 x 200 x 150 mm',
+      material: '3 lớp sóng B',
+      flute: 'Sóng B',
+      printTech: 'Offset',
+      colors: ['Vàng', 'Xanh Dương'],
+      netWeight: '280g'
+    },
+    defects: [],
+    specLogs: []
+  },
+  {
+    id: '4',
+    title: 'Thùng Pepsi Cola 330ml x 24',
+    abstract: 'Thùng tiêu chuẩn kênh quán ăn, nhà hàng.',
+    code: 'SKU-PEP-STD-24',
+    productionOrder: 'PO-2023-10-001',
+    date: '15/11/2023',
+    sender: 'PEPSICO',
+    status: 'processing',
+    urgency: 'urgent',
+    type: 'incoming',
+    department: 'Phòng Sales',
+    handler: 'Phạm Thị D',
+    specs: {
+      dimensions: '300 x 200 x 120 mm',
+      material: '5 lớp mộc',
+      flute: 'Sóng B',
+      printTech: 'Flexo 2 màu',
+      colors: ['Xanh Pepsi', 'Đen'],
+      netWeight: '400g'
+    },
+    specLogs: []
+  },
+  {
+    id: '5',
+    title: 'Hộp quà Tết 7UP - Lốc 6',
+    abstract: 'Hộp quà biếu tặng, quai xách nhựa, cửa sổ bóng kính.',
+    code: 'SKU-7UP-TET-06',
+    productionOrder: 'PO-2023-10-015',
+    date: '25/10/2023',
+    sender: 'PEPSICO',
+    status: 'approved',
+    urgency: 'normal',
+    type: 'incoming',
+    department: 'Phòng Thiết Kế',
+    handler: 'Hoàng Văn E',
+    specs: {
+      dimensions: '150 x 100 x 200 mm',
+      material: 'Ivory 300',
+      flute: 'N/A',
+      printTech: 'Offset UV',
+      colors: ['Xanh lá', 'Vàng chanh'],
+      netWeight: '120g'
+    },
+    specLogs: []
+  }
+];
+
+export const MOCK_CHAT: ChatMessage[] = [
+  { id: '1', sender: 'Client - Anh Nam', avatar: 'https://images.unsplash.com/photo-1542206395-9feb3edaa68d?w=100&h=100&fit=crop', text: 'Em kiểm tra lại mã màu Pantone xanh Tiger nhé, hơi đậm.', timestamp: '09:00 AM', isMe: false, role: 'Client' },
+  { id: '2', sender: 'Bạn', avatar: 'https://picsum.photos/40/40?random=2', text: 'Dạ em đang cho test lại bản in mẫu.', timestamp: '09:15 AM', isMe: true, role: 'Sale' },
+  { id: '3', sender: 'Quản lý', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop', text: '@NV001 Chú ý kiểm tra kỹ phần chồng màu nhé.', timestamp: '09:30 AM', isMe: false, role: 'Quản lý' },
+  { id: '4', sender: 'KCS', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop', text: 'Hình ảnh lỗi lem mực tại máy in 2', image: 'https://images.unsplash.com/photo-1574950578143-858c6fc58922?w=400&q=80', timestamp: '09:45 AM', isMe: false, role: 'KCS' },
+];
+
+export const CHART_LINE_DATA: ChartDataPoint[] = [
+  { name: '1', value: 40, value2: 60, value3: 20 },
+  { name: '2', value: 30, value2: 65, value3: 25 },
+  { name: '3', value: 20, value2: 68, value3: 15 },
+  { name: '4', value: 27, value2: 70, value3: 18 },
+  { name: '5', value: 18, value2: 75, value3: 30 },
+  { name: '6', value: 23, value2: 80, value3: 40 },
+  { name: '7', value: 34, value2: 78, value3: 45 },
+  { name: '8', value: 45, value2: 82, value3: 50 },
+  { name: '9', value: 30, value2: 85, value3: 48 },
+  { name: '10', value: 25, value2: 88, value3: 42 },
+];
+
+export const CHART_BAR_DATA: ChartDataPoint[] = [
+  { name: 'HEINEKEN', value: 100 },
+  { name: 'PEPSICO', value: 85 },
+  { name: 'COCA-COLA', value: 70 },
+  { name: 'NESTLE', value: 60 },
+  { name: 'UNILEVER', value: 50 },
+];
