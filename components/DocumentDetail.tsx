@@ -14,7 +14,8 @@ interface Props {
 const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
   const [activeTab, setActiveTab] = useState<TabType>('OVERVIEW');
   const [chatMessage, setChatMessage] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>(MOCK_CHAT);
+  // Use messages from document or fallback to empty array (not mock data for fresh docs)
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -30,8 +31,19 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
       dimensions: '', material: '', flute: '', printTech: '', colors: [], netWeight: ''
   });
 
-  // Initialize specs state
+  // Initialize state when document changes
   useEffect(() => {
+    // Sync Messages
+    if (document.messages && document.messages.length > 0) {
+        setMessages(document.messages);
+    } else {
+        // Only load mock chat if it's one of the hardcoded initial mock documents
+        // For newly created documents, messages should be empty
+        const isMockDoc = MOCK_DOCUMENTS.some(d => d.id === document.id);
+        setMessages(isMockDoc ? MOCK_CHAT : []);
+    }
+
+    // Sync Specs
     if (document.specs) {
         setTempSpecs(document.specs);
         setIsEditingSpecs(false);
@@ -100,9 +112,14 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
         role: 'Sale'
     };
     
-    setMessages([...messages, newMessage]);
+    const newMessagesList = [...messages, newMessage];
+    setMessages(newMessagesList);
     setChatMessage('');
 
+    // Update document messages immediately
+    let updatedDoc = { ...document, messages: newMessagesList };
+
+    // Auto Approval Logic
     if (images.length > 0) {
         images.forEach(img => {
             const newItem: ApprovalItem = {
@@ -116,8 +133,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                 status: 'pending',
                 reporter: newMessage.sender
             };
-            const updatedItems = [...(document.approvalItems || []), newItem];
-            onUpdateDocument({ ...document, approvalItems: updatedItems });
+            updatedDoc.approvalItems = [...(updatedDoc.approvalItems || []), newItem];
         });
     } else if (newMessage.text) {
         if (autoCategory !== 'KHÁC') {
@@ -131,9 +147,11 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                 status: 'pending',
                 reporter: newMessage.sender
             };
-            onUpdateDocument({ ...document, approvalItems: [...(document.approvalItems || []), newItem] });
+            updatedDoc.approvalItems = [...(updatedDoc.approvalItems || []), newItem];
         }
     }
+    
+    onUpdateDocument(updatedDoc);
   };
 
   const handleSaveCategoryToLog = (category: 'SÓNG' | 'IN' | 'THÀNH PHẨM' | 'KHO' | 'TCKT', manualContent: string, manualSolution: string) => {
@@ -213,10 +231,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
   };
 
   const renderApproveQuadrant = (category: 'SÓNG' | 'IN' | 'THÀNH PHẨM' | 'KHO' | 'TCKT', icon: any, colorClass: string) => {
-     // If View All is On, we show items from ALL versions, but we can only SAVE to the current version.
-     // So for pending actions, it's safer to only show current document's pending items to avoid confusion on where it saves.
-     // However, the request implies Admin wants to SEE everything.
-     
      const items = getApprovalItems().filter(i => i.category === category && i.status === 'pending');
      
      return (
@@ -228,7 +242,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
             isViewAll={viewAllHistory}
             onSave={(content, solution) => handleSaveCategoryToLog(category, content, solution)}
             onDelete={(id) => {
-                 // Simple delete for current doc, for aggregated it's complex, so disable delete in view all
                  if(!viewAllHistory) {
                      const updatedItems = (document.approvalItems || []).filter(item => item.id !== id);
                      onUpdateDocument({ ...document, approvalItems: updatedItems });
@@ -559,50 +572,56 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                <span>Nội dung chứa "TCKT, Sóng, In..." sẽ tự động phân loại sang tab Duyệt.</span>
             </div>
             <div className="flex-1 space-y-4 mb-4 overflow-y-auto">
-              {messages.map((msg) => (
-                <div key={msg.id} className={`flex gap-3 ${msg.isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                  <img src={msg.avatar} alt="avatar" className="w-8 h-8 rounded-full border border-gray-200" />
-                  <div className={`max-w-[80%] flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
-                     <span className="text-[10px] text-gray-500 mb-1 ml-1">{msg.role} - {msg.sender}</span>
-                     <div 
-                        onDoubleClick={() => handleChatDoubleClick(msg)}
-                        className={`p-3 rounded-lg text-sm shadow-sm cursor-pointer select-none transition-transform active:scale-95 ${
-                        msg.isMe ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 border border-gray-100 hover:border-blue-300'
-                     }`}>
-                        <p>{msg.text}</p>
-                        
-                        {/* Display Multiple Images */}
-                        {msg.images && msg.images.length > 0 && (
-                             <div className={`grid gap-1 mt-2 ${msg.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                                 {msg.images.map((img, idx) => (
-                                     <img 
-                                        key={idx}
-                                        src={img}
-                                        onClick={(e) => { e.stopPropagation(); setPreviewImage(img); }}
-                                        className="rounded bg-white w-full h-24 object-cover border border-black/10 cursor-zoom-in"
-                                        alt={`attachment-${idx}`}
-                                     />
-                                 ))}
-                             </div>
-                        )}
-                        
-                        {/* Legacy Single Image */}
-                        {msg.image && (
-                            <img 
-                                src={msg.image} 
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPreviewImage(msg.image!);
-                                }}
-                                alt="Chat attachment" 
-                                className="mt-2 rounded-lg max-w-full h-auto border border-black/10 cursor-zoom-in" 
-                            />
-                        )}
-                     </div>
-                     <span className={`text-[9px] block mt-1 mx-1 ${msg.isMe ? 'text-blue-300' : 'text-gray-400'}`}>{msg.timestamp}</span>
+              {messages.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400 text-sm">
+                      Chưa có tin nhắn nào. Bắt đầu hội thoại ngay.
                   </div>
-                </div>
-              ))}
+              ) : (
+                messages.map((msg) => (
+                    <div key={msg.id} className={`flex gap-3 ${msg.isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                    <img src={msg.avatar} alt="avatar" className="w-8 h-8 rounded-full border border-gray-200" />
+                    <div className={`max-w-[80%] flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
+                        <span className="text-[10px] text-gray-500 mb-1 ml-1">{msg.role} - {msg.sender}</span>
+                        <div 
+                            onDoubleClick={() => handleChatDoubleClick(msg)}
+                            className={`p-3 rounded-lg text-sm shadow-sm cursor-pointer select-none transition-transform active:scale-95 ${
+                            msg.isMe ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 border border-gray-100 hover:border-blue-300'
+                        }`}>
+                            <p>{msg.text}</p>
+                            
+                            {/* Display Multiple Images */}
+                            {msg.images && msg.images.length > 0 && (
+                                <div className={`grid gap-1 mt-2 ${msg.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                    {msg.images.map((img, idx) => (
+                                        <img 
+                                            key={idx}
+                                            src={img}
+                                            onClick={(e) => { e.stopPropagation(); setPreviewImage(img); }}
+                                            className="rounded bg-white w-full h-24 object-cover border border-black/10 cursor-zoom-in"
+                                            alt={`attachment-${idx}`}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                            
+                            {/* Legacy Single Image */}
+                            {msg.image && (
+                                <img 
+                                    src={msg.image} 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setPreviewImage(msg.image!);
+                                    }}
+                                    alt="Chat attachment" 
+                                    className="mt-2 rounded-lg max-w-full h-auto border border-black/10 cursor-zoom-in" 
+                                />
+                            )}
+                        </div>
+                        <span className={`text-[9px] block mt-1 mx-1 ${msg.isMe ? 'text-blue-300' : 'text-gray-400'}`}>{msg.timestamp}</span>
+                    </div>
+                    </div>
+                ))
+              )}
             </div>
             <div className="bg-white p-2 rounded-lg border border-gray-300 flex items-center gap-2 shadow-sm">
                 <input 

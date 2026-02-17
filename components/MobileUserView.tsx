@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User as AppUser, MobileTask, ChatMessage } from '../types';
-import { MOCK_TASKS, MOCK_MOBILE_CHAT } from '../constants';
+import { User as AppUser, MobileTask, ChatMessage, Document } from '../types';
+import { MOCK_MOBILE_CHAT } from '../constants';
 import ImageViewer from './ImageViewer';
 import { compressImage, sendBrowserNotification } from '../utils';
 import { LogOut, Search, Folder, Clock, Check, ArrowLeft, Image as ImageIcon, Send, Plus, X, Calendar, User } from 'lucide-react';
@@ -9,14 +9,15 @@ import { LogOut, Search, Folder, Clock, Check, ArrowLeft, Image as ImageIcon, Se
 interface Props {
   user: AppUser;
   onLogout: () => void;
+  documents: Document[]; // Receive from App
+  onAddDocument: (doc: Document) => void; // Sync back to App
+  onUpdateDocument: (doc: Document) => void; // Sync updates
 }
 
-const MobileUserView: React.FC<Props> = ({ user, onLogout }) => {
+const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocument, onUpdateDocument }) => {
   const [activeTab, setActiveTab] = useState<'MY_ITEMS' | 'ALL'>('MY_ITEMS');
-  const [tasks, setTasks] = useState<MobileTask[]>(MOCK_TASKS);
-  const [selectedTask, setSelectedTask] = useState<MobileTask | null>(null);
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [chatMessage, setChatMessage] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>(MOCK_MOBILE_CHAT);
   const [viewImage, setViewImage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -31,6 +32,10 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout }) => {
       code: '', // Phiếu SX
   });
 
+  // Derived selected document
+  const selectedDoc = documents.find(d => d.id === selectedDocId) || null;
+  const messages = selectedDoc?.messages || []; // Use messages from the specific document
+
   // Request Notification Permission on mount
   useEffect(() => {
     if ("Notification" in window && Notification.permission !== "granted") {
@@ -38,32 +43,19 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout }) => {
     }
   }, []);
 
-  // Simulate Incoming Message (Demo for Notification)
-  useEffect(() => {
-    const timer = setInterval(() => {
-        const random = Math.random();
-        if (random > 0.95) { // 5% chance every 5s
-            const incomingMsg: ChatMessage = {
-                id: Date.now().toString(),
-                sender: 'Admin (Hệ thống)',
-                role: 'Quản lý',
-                avatar: 'https://cdn-icons-png.flaticon.com/512/4140/4140048.png',
-                text: 'Có cập nhật mới về tiến độ sản xuất.',
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                isMe: false
-            };
-            
-            // Only add if we are NOT inside the chat or looking at it
-            // Simple logic: Add to list, if selectedTask is null, show notification
-            setMessages(prev => [...prev, incomingMsg]);
-            
-            if (!selectedTask) {
-               sendBrowserNotification("Tin nhắn mới từ MPPACK", "Admin: Có cập nhật mới về tiến độ sản xuất.");
-            }
-        }
-    }, 10000); // Check every 10s
-    return () => clearInterval(timer);
-  }, [selectedTask]);
+  // Map Documents to MobileTasks interface for display
+  const tasks: MobileTask[] = documents.map(doc => ({
+      id: doc.id,
+      title: doc.title,
+      sender: doc.sender,
+      sku: doc.code,
+      code: doc.productionOrder || doc.code,
+      date: doc.date,
+      status: doc.status === 'approved' ? 'completed' : 'pending',
+      notificationCount: (doc.approvalItems || []).filter(i => i.status === 'pending').length,
+      isMyTask: true, // For demo, assume all are visible/assigned
+      type: 'folder'
+  }));
 
   const myTasks = tasks.filter(t => t.isMyTask);
   const allTasks = tasks;
@@ -78,14 +70,18 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout }) => {
   }
 
   displayTasks.sort((a, b) => {
-     const dateA = a.date.split('/').reverse().join('');
-     const dateB = b.date.split('/').reverse().join('');
-     return dateB.localeCompare(dateA);
+     // Parse date DD/MM/YYYY
+     const [dayA, monthA, yearA] = a.date.split('/');
+     const [dayB, monthB, yearB] = b.date.split('/');
+     const dateA = new Date(parseInt(yearA), parseInt(monthA) - 1, parseInt(dayA));
+     const dateB = new Date(parseInt(yearB), parseInt(monthB) - 1, parseInt(dayB));
+     return dateB.getTime() - dateA.getTime();
   });
 
   const uniqueSenders = Array.from(new Set(tasks.map(t => t.sender).filter(Boolean))) as string[];
 
   const handleSendMessage = async () => {
+    if (!selectedDoc) return;
     if (!chatMessage.trim() && (!fileInputRef.current?.files || fileInputRef.current.files.length === 0)) return;
     
     // Handle Images
@@ -100,22 +96,24 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout }) => {
                 console.error("Compression failed", e);
             }
         }
-        // Clear input
         fileInputRef.current.value = '';
     }
 
     const newMessage: ChatMessage = {
       id: Date.now().toString(),
-      sender: 'Bạn',
-      role: 'Bạn',
+      sender: user.name, // Use actual logged in user name
+      role: user.role === 'ADMIN' ? 'Quản lý' : 'Bạn',
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
       text: chatMessage,
-      images: images, // Send array of images
+      images: images,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
       isMe: true
     };
     
-    setMessages([...messages, newMessage]);
+    // Update the document with new message
+    const updatedMessages = [...(selectedDoc.messages || []), newMessage];
+    onUpdateDocument({ ...selectedDoc, messages: updatedMessages });
+    
     setChatMessage('');
   };
 
@@ -129,93 +127,107 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout }) => {
       const today = new Date();
       const dateStr = `${today.getDate().toString().padStart(2,'0')}/${(today.getMonth()+1).toString().padStart(2,'0')}/${today.getFullYear()}`;
 
-      const newTask: MobileTask = {
+      // Create a full Document object for sync
+      const newDoc: Document = {
           id: Date.now().toString(),
-          sender: newProfile.sender,
           title: newProfile.title,
-          code: newProfile.code,
-          sku: `SKU-${Math.floor(Math.random() * 10000)}`,
+          code: `SKU-${Math.floor(Math.random() * 10000)}`, // Auto generate SKU for demo
+          productionOrder: newProfile.code,
           date: dateStr,
-          status: 'pending',
-          notificationCount: 0,
-          isMyTask: true,
-          type: 'folder'
+          sender: newProfile.sender,
+          status: 'processing',
+          urgency: 'normal',
+          type: 'incoming',
+          abstract: 'Hồ sơ mới tạo từ Mobile App',
+          department: user.department || 'SX',
+          handler: user.name,
+          specs: undefined, // Empty specs for new doc
+          defects: [],
+          specLogs: [],
+          approvalItems: [],
+          messages: [] // Empty chat for new doc
       };
 
-      setTasks([newTask, ...tasks]);
+      onAddDocument(newDoc);
       setIsCreateModalOpen(false);
       setNewProfile({ sender: '', title: '', code: '' });
-      setSelectedTask(newTask);
+      setSelectedDocId(newDoc.id); // Open it immediately
       setSearchTerm('');
   };
 
   // View: CHAT DETAIL
-  if (selectedTask) {
+  if (selectedDoc) {
     return (
       <div className="flex flex-col h-[100dvh] bg-gray-100">
         {/* Header */}
         <div className="bg-[#0060AF] text-white p-4 flex items-center justify-between shadow-md">
            <div className="flex items-center gap-3 overflow-hidden">
-             <button onClick={() => setSelectedTask(null)} className="p-1 hover:bg-white/10 rounded">
+             <button onClick={() => setSelectedDocId(null)} className="p-1 hover:bg-white/10 rounded">
                 <ArrowLeft size={24} />
              </button>
              <div className="flex flex-col overflow-hidden">
-                <h2 className="font-bold text-sm truncate w-full">{selectedTask.title}</h2>
+                <h2 className="font-bold text-sm truncate w-full">{selectedDoc.title}</h2>
                 <div className="flex text-[10px] gap-2 opacity-80">
-                   <span className="bg-white/20 px-1 rounded">{selectedTask.sku}</span>
-                   <span className="text-blue-200">{selectedTask.code}</span>
+                   <span className="bg-white/20 px-1 rounded">{selectedDoc.code}</span>
+                   <span className="text-blue-200">{selectedDoc.productionOrder}</span>
                 </div>
              </div>
            </div>
-           <button onClick={() => setSelectedTask(null)} className="bg-red-50 text-red-500 text-xs px-2 py-1 rounded border border-red-100">
+           <button onClick={() => setSelectedDocId(null)} className="bg-red-50 text-red-500 text-xs px-2 py-1 rounded border border-red-100">
              Thoát
            </button>
         </div>
 
         {/* Chat Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-           {messages.map((msg) => (
-             <div key={msg.id} className={`flex gap-2 ${msg.isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                <img src={msg.avatar} className="w-8 h-8 rounded-full border border-gray-200 shadow-sm" alt={msg.sender} />
-                
-                <div className={`max-w-[80%] flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
-                   {!msg.isMe && <span className="text-[10px] text-gray-500 ml-1 mb-0.5">{msg.sender}</span>}
-                   
-                   <div className={`p-3 rounded-xl text-sm shadow-sm ${
-                      msg.isMe ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none'
-                   }`}>
-                      {msg.text && <p className="mb-1">{msg.text}</p>}
-                      
-                      {/* Backward Compatibility for single image */}
-                      {msg.image && (
-                        <img 
-                            src={msg.image} 
-                            onClick={() => setViewImage(msg.image!)}
-                            className="mt-1 rounded-lg max-w-full h-auto border border-black/10 cursor-zoom-in" 
-                            alt="attachment" 
-                        />
-                      )}
+           {messages.length === 0 ? (
+               <div className="text-center py-10 text-gray-400 text-sm italic">
+                   Chưa có tin nhắn nào. Hãy bắt đầu trao đổi.
+               </div>
+           ) : (
+               messages.map((msg) => (
+                <div key={msg.id} className={`flex gap-2 ${msg.isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                    <img src={msg.avatar} className="w-8 h-8 rounded-full border border-gray-200 shadow-sm" alt={msg.sender} />
+                    
+                    <div className={`max-w-[80%] flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
+                    {!msg.isMe && <span className="text-[10px] text-gray-500 ml-1 mb-0.5">{msg.sender}</span>}
+                    
+                    <div className={`p-3 rounded-xl text-sm shadow-sm ${
+                        msg.isMe ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none'
+                    }`}>
+                        {msg.text && <p className="mb-1">{msg.text}</p>}
+                        
+                        {/* Backward Compatibility for single image */}
+                        {msg.image && (
+                            <img 
+                                src={msg.image} 
+                                onClick={() => setViewImage(msg.image!)}
+                                className="mt-1 rounded-lg max-w-full h-auto border border-black/10 cursor-zoom-in" 
+                                alt="attachment" 
+                            />
+                        )}
 
-                      {/* Multiple Images Grid */}
-                      {msg.images && msg.images.length > 0 && (
-                          <div className={`grid gap-1 mt-1 ${msg.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                              {msg.images.map((img, idx) => (
-                                  <img 
-                                    key={idx}
-                                    src={img}
-                                    onClick={() => setViewImage(img)}
-                                    className="rounded-lg w-full h-24 object-cover border border-black/10 cursor-zoom-in"
-                                    alt={`img-${idx}`}
-                                  />
-                              ))}
-                          </div>
-                      )}
-                   </div>
-                   
-                   <span className="text-[9px] text-gray-400 mt-1 mx-1">{msg.timestamp}</span>
+                        {/* Multiple Images Grid */}
+                        {msg.images && msg.images.length > 0 && (
+                            <div className={`grid gap-1 mt-1 ${msg.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                {msg.images.map((img, idx) => (
+                                    <img 
+                                        key={idx}
+                                        src={img}
+                                        onClick={() => setViewImage(img)}
+                                        className="rounded-lg w-full h-24 object-cover border border-black/10 cursor-zoom-in"
+                                        alt={`img-${idx}`}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    
+                    <span className="text-[9px] text-gray-400 mt-1 mx-1">{msg.timestamp}</span>
+                    </div>
                 </div>
-             </div>
-           ))}
+               ))
+           )}
         </div>
 
         {/* Input Area with Extra Bottom Padding for Mobile Nav Bar */}
@@ -226,7 +238,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout }) => {
               accept="image/*" 
               className="hidden" 
               ref={fileInputRef}
-              onChange={handleSendMessage} // Auto send on select for simplicity or handle state to show preview
+              onChange={handleSendMessage} 
            />
            <button 
                 onClick={() => fileInputRef.current?.click()}
@@ -345,7 +357,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout }) => {
             displayTasks.map((task) => (
             <div 
                 key={task.id} 
-                onClick={() => setSelectedTask(task)}
+                onClick={() => setSelectedDocId(task.id)}
                 className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex items-start gap-3 active:scale-[0.98] transition-transform"
             >
                 <div className="relative">

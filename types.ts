@@ -82,6 +82,18 @@ export interface ApprovalItem {
   reporter?: string; // Name of sender from chat
 }
 
+export interface ChatMessage {
+  id: string;
+  sender: string;
+  avatar: string;
+  text: string;
+  image?: string; // Deprecated, kept for backward compatibility
+  images?: string[]; // New: Support multiple images
+  timestamp: string;
+  isMe: boolean;
+  role?: string; // 'Client', 'Quản lý', etc.
+}
+
 export interface Document {
   id: string;
   title: string; // Product Name (e.g., Thùng Tiger)
@@ -100,18 +112,7 @@ export interface Document {
   defects?: DefectEntry[]; // Log of defects
   specLogs?: SpecLogEntry[]; // Log of spec checks
   approvalItems?: ApprovalItem[]; // Items saved from chat
-}
-
-export interface ChatMessage {
-  id: string;
-  sender: string;
-  avatar: string;
-  text: string;
-  image?: string; // Deprecated, kept for backward compatibility
-  images?: string[]; // New: Support multiple images
-  timestamp: string;
-  isMe: boolean;
-  role?: string; // 'Client', 'Quản lý', etc.
+  messages?: ChatMessage[]; // Chat history specific to this document
 }
 
 export interface ChartDataPoint {
