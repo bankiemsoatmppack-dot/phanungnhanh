@@ -19,6 +19,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null); // Ref for auto-scrolling
 
   // History Tab State
   const [historySubTab, setHistorySubTab] = useState<'DOC' | 'PO' | 'APPROVE'>('DOC');
@@ -42,8 +43,13 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
     if (document.messages && document.messages.length > 0) {
         setMessages(document.messages);
     } else {
+        // Only use mock if it's explicitly a mock doc (ID check) AND messages are missing
         const isMockDoc = MOCK_DOCUMENTS.some(d => d.id === document.id);
-        setMessages(isMockDoc ? MOCK_CHAT : []);
+        if (isMockDoc && (!document.messages || document.messages.length === 0)) {
+             setMessages(MOCK_CHAT);
+        } else {
+             setMessages([]);
+        }
     }
 
     // Sync Specs
@@ -60,6 +66,13 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
     setDocHistory(allLogs);
 
   }, [document]);
+
+  // Auto-scroll to bottom whenever messages update
+  useEffect(() => {
+      if (activeTab === 'CHAT' && chatEndRef.current) {
+          chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+  }, [messages, activeTab]);
 
   // Handle Switching PO
   const handleSwitchPO = (docId: string) => {
@@ -535,6 +548,8 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                     </div>
                 ))
               )}
+              {/* Dummy div to scroll to */}
+              <div ref={chatEndRef} />
             </div>
             {/* Input Area */}
             <div className="bg-white p-2 rounded-lg border border-gray-300 flex items-center gap-2 shadow-sm">

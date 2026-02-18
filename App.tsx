@@ -37,27 +37,43 @@ const App: React.FC = () => {
   // State for missing solution notifications
   const [missingSolutions, setMissingSolutions] = useState<{docId: string, docTitle: string, defectId: string, defectContent: string}[]>([]);
 
-  // --- LOAD DOCUMENTS FROM STORAGE ---
-  const loadDocuments = async () => {
+  // --- LOAD DOCUMENTS FROM STORAGE (POLLING ENABLED) ---
+  const loadDocuments = async (isInitialLoad = false) => {
       try {
           const docs = await fetchDocumentsFromSheet();
-          setDocuments(docs);
           
-          // Set initial selection if needed
-          if (docs.length > 0 && !selectedDocId) {
+          // Optimization: Only update state if stringified data differs to prevent UI flickering
+          // This allows us to poll frequently without performance hits if no data changed
+          setDocuments(prevDocs => {
+              if (JSON.stringify(prevDocs) !== JSON.stringify(docs)) {
+                  return docs;
+              }
+              return prevDocs;
+          });
+          
+          // Set initial selection only if needed and it's the first load
+          if (isInitialLoad && docs.length > 0 && !selectedDocId) {
               const first = docs[0];
               setSelectedProductKey(`${first.sender}|${first.title}`);
               setSelectedDocId(first.id);
           }
       } catch (error) {
           console.error("Failed to load documents", error);
-          setDocuments(MOCK_DOCUMENTS); // Fallback
+          if (isInitialLoad) setDocuments(MOCK_DOCUMENTS); // Fallback only on initial load error
       }
   };
 
+  // Initial Load & Real-time Polling
   useEffect(() => {
-      loadDocuments();
-  }, []);
+      loadDocuments(true); // Immediate load
+
+      // Poll every 2 seconds to sync Chat & Updates from other users
+      const interval = setInterval(() => {
+          loadDocuments(false);
+      }, 2000);
+
+      return () => clearInterval(interval);
+  }, [user]); // Reload if user switches (Logout/Login)
 
   // --- HEARTBEAT & LOGOUT HANDLER ---
   useEffect(() => {
