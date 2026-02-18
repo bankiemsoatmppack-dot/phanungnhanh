@@ -1,18 +1,19 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Document, TabType, ChatMessage, DefectEntry, ApprovalItem, SpecLogEntry, PackagingSpecs, SystemLogEntry } from '../types';
-import { MOCK_CHAT, MOCK_DOCUMENTS } from '../constants';
+import { Document, TabType, ChatMessage, DefectEntry, ApprovalItem, SpecLogEntry, PackagingSpecs, SystemLogEntry, User } from '../types';
+import { MOCK_MOBILE_CHAT, MOCK_DOCUMENTS } from '../constants';
 import ImageViewer from './ImageViewer';
 import { compressImage } from '../utils';
 import { saveChatToSheet, saveHoSoToSheet, uploadToGoogleDrive, getActionLogs } from '../services/storageService';
-import { Send, Paperclip, Save, Printer, Share2, MoreHorizontal, PenTool, Layers, Palette, Ruler, AlertCircle, MessageSquare, Trash2, CheckCircle, RefreshCcw, Image as ImageIcon, Download, FileSpreadsheet, ClipboardCheck, FileText, Table, Calendar, User, Building, AlertTriangle, Edit3, X, History, Eye, Link, Database, Cloud, Clock, Check, ArrowRight, CornerUpRight, Tag } from 'lucide-react';
+import { Send, Paperclip, Save, Printer, Share2, MoreHorizontal, PenTool, Layers, Palette, Ruler, AlertCircle, MessageSquare, Trash2, CheckCircle, RefreshCcw, Image as ImageIcon, Download, FileSpreadsheet, ClipboardCheck, FileText, Table, Calendar, Building, AlertTriangle, Edit3, X, History, Eye, Link, Database, Cloud, Clock, Check, ArrowRight, CornerUpRight, Tag } from 'lucide-react';
 
 interface Props {
   document: Document;
   onUpdateDocument: (updatedDoc: Document) => void;
+  currentUser: User; // Added currentUser prop to get real name
 }
 
-const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
+const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument, currentUser }) => {
   const [activeTab, setActiveTab] = useState<TabType>('OVERVIEW');
   const [chatMessage, setChatMessage] = useState('');
   // Use messages from document or fallback to empty array (not mock data for fresh docs)
@@ -50,7 +51,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
         // Only use mock if it's explicitly a mock doc (ID check) AND messages are missing
         const isMockDoc = MOCK_DOCUMENTS.some(d => d.id === document.id);
         if (isMockDoc && (!document.messages || document.messages.length === 0)) {
-             setMessages(MOCK_CHAT);
+             setMessages(MOCK_MOBILE_CHAT);
         } else {
              setMessages([]);
         }
@@ -165,13 +166,13 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
 
     const newMessage: ChatMessage = {
         id: Date.now().toString(),
-        sender: 'Tôi',
+        sender: currentUser.name, // Use actual name from prop
         avatar: '', // Removed Avatar
         text: displayMessage,
         images: images,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isMe: true,
-        role: 'Sale',
+        role: currentUser.role === 'ADMIN' ? 'Quản lý' : 'Nhân viên',
         department: document.department
     };
     
@@ -233,7 +234,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
       const combinedContent = [manualContent, ...pendingItems.map(i => i.content)].filter(Boolean).join('. ');
       const combinedImages = pendingItems.map(i => i.image).filter((img): img is string => !!img);
       const reporters = [...new Set(pendingItems.map(i => i.reporter).filter(Boolean))].join(', ');
-      const finalReporter = reporters || 'Admin';
+      const finalReporter = reporters || currentUser.name || 'Admin';
 
       if (!combinedContent && combinedImages.length === 0 && !manualSolution) {
           alert('Vui lòng nhập nội dung hoặc chọn dữ liệu từ chat.');
@@ -609,8 +610,8 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                         <div className={`max-w-[80%] flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
                             <div className="flex items-center gap-2 mb-1">
                                 <span className={`text-xs font-bold ${msg.isMe ? 'text-blue-700' : 'text-gray-700'}`}>
-                                    {/* Display Name Logic: "Tôi" vs Full Name */}
-                                    {msg.isMe ? 'Tôi' : msg.sender}
+                                    {/* UPDATED: Show real Name instead of 'Tôi' */}
+                                    {msg.sender}
                                 </span>
                                 <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 rounded-full">{msg.role}</span>
                             </div>

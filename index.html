@@ -3,7 +3,7 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>PHẢN ỨNG NHANH - MPPACK - Thiết kế bởi Nguyễn Thái</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -29,8 +29,20 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-      body { font-family: 'Inter', sans-serif; }
-      /* Custom scrollbar for better aesthetics */
+      /* Reset basic settings for App-like experience */
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%; /* Fallback */
+        height: 100dvh; /* Dynamic viewport height */
+        overflow: hidden; /* Prevent elastic scrolling on body */
+        overscroll-behavior: none; /* Disable pull-to-refresh effect */
+        font-family: 'Inter', sans-serif;
+        -webkit-tap-highlight-color: transparent;
+      }
+      
+      /* Custom scrollbar for better aesthetics inside containers */
       ::-webkit-scrollbar { width: 6px; height: 6px; }
       ::-webkit-scrollbar-track { background: #f1f1f1; }
       ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
@@ -49,8 +61,8 @@
 }
 </script>
 </head>
-  <body class="bg-soft-bg text-slate-800 h-screen overflow-hidden">
-    <div id="root"></div>
+  <body class="bg-soft-bg text-slate-800">
+    <div id="root" style="height: 100%; width: 100%;"></div>
     <script type="module" src="./index.tsx"></script>
   </body>
 </html>

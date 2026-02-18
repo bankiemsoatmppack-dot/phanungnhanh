@@ -298,9 +298,9 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
   // View: CHAT DETAIL
   if (selectedDoc) {
      return (
-        <div className="flex flex-col h-[100dvh] bg-gray-100">
-             {/* Header */}
-            <div className="bg-[#0060AF] text-white pt-4 pb-2 px-4 shadow-md z-20">
+        <div className="flex flex-col h-[100dvh] bg-gray-100 overflow-hidden">
+             {/* Header - Not Sticky, just standard block */}
+            <div className="bg-[#0060AF] text-white pt-4 pb-2 px-4 shadow-md z-20 shrink-0">
             {/* ... (Header Content) ... */}
             <div className="flex items-center justify-between mb-2">
                 <button onClick={() => setSelectedDocId(null)} className="p-1 hover:bg-white/10 rounded">
@@ -331,7 +331,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
                 </button>
 
                 {showPOSwitcher && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden text-gray-800 animate-in fade-in zoom-in-95 duration-200 origin-top">
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden text-gray-800 animate-in fade-in zoom-in-95 duration-200 origin-top z-50">
                         <div className="max-h-60 overflow-y-auto">
                             {relatedPOs.map(po => (
                                 <button 
@@ -371,7 +371,8 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
                         {/* Message Bubble Logic */}
                         <div className={`max-w-[80%] flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
                         <span className={`text-[11px] font-bold ml-1 mb-0.5 ${msg.isMe ? 'text-blue-700' : 'text-gray-700'}`}>
-                            {msg.isMe ? 'Tôi' : msg.sender}
+                            {/* UPDATED: Show real Name instead of 'Tôi' */}
+                            {msg.sender}
                         </span>
                         
                         <div className={`p-3 rounded-xl text-sm shadow-sm ${
@@ -411,7 +412,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
             </div>
 
             {/* Input Area */}
-            <div className="bg-white p-3 pb-8 border-t border-gray-200 flex items-center gap-3">
+            <div className="bg-white p-3 pb-8 border-t border-gray-200 flex items-center gap-3 shrink-0">
             <input 
                 type="file" 
                 multiple 
@@ -483,9 +484,9 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
 
   // View: HOME / LIST
   return (
-    <div className="flex flex-col h-[100dvh] bg-white relative">
-      {/* Header */}
-      <div className="bg-[#0060AF] text-white p-4 shadow-md sticky top-0 z-10">
+    <div className="flex flex-col h-[100dvh] bg-white relative overflow-hidden">
+      {/* Header - Fixed block instead of sticky for better containment */}
+      <div className="bg-[#0060AF] text-white p-4 shadow-md z-10 shrink-0">
         <div className="flex justify-between items-center mb-4">
            <div className="flex items-center gap-2">
              <div className="bg-white/20 p-1.5 rounded-lg">
@@ -547,9 +548,8 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
         </div>
       </div>
       
-      {/* ... (Existing List Content and Logic) ... */}
       {/* Tabs */}
-      <div className="flex border-b border-gray-200">
+      <div className="flex border-b border-gray-200 shrink-0">
          <button 
            onClick={() => setActiveTab('MY_ITEMS')}
            className={`flex-1 py-3 text-sm font-semibold flex justify-center items-center gap-2 relative ${
@@ -571,8 +571,8 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
          </button>
       </div>
 
-      {/* Date Filters - UPDATED */}
-      <div className="px-4 py-3 flex gap-2 overflow-x-auto no-scrollbar bg-white border-b border-gray-100">
+      {/* Date Filters */}
+      <div className="px-4 py-3 flex gap-2 overflow-x-auto no-scrollbar bg-white border-b border-gray-100 shrink-0">
          <button 
             onClick={() => setDateFilter('TODAY')}
             className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${dateFilter === 'TODAY' ? 'bg-blue-600 text-white border-blue-600' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}

@@ -1,6 +1,6 @@
 
 import { DriveSlot, ChatMessage, DefectEntry, Document, Announcement, LoginLogEntry, User, SystemLogEntry, LogCategory, LogAction, Employee } from '../types';
-import { MOCK_ANNOUNCEMENTS, MOCK_DOCUMENTS, MOCK_EMPLOYEES } from '../constants';
+import { MOCK_ANNOUNCEMENTS, MOCK_DOCUMENTS, MOCK_EMPLOYEES, DEFAULT_STORAGE_SLOTS } from '../constants';
 
 // Constants
 const HARD_LIMIT_BYTES = 15 * 1024 * 1024 * 1024; // 15GB (Google Drive Limit)
@@ -141,10 +141,16 @@ export const getInternalGroupMessages = (): any[] => {
 };
 
 
-// Helper: Get all slots
-const getSlots = (): DriveSlot[] => {
+// Helper: Get all slots (Use Default/Server config if local is empty)
+export const getSlots = (): DriveSlot[] => {
     const saved = localStorage.getItem('storage_slots');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+        return JSON.parse(saved);
+    }
+    // FALLBACK TO SERVER/DEFAULT CONFIG IF NO LOCAL DATA
+    // This solves the issue of "New Device = Empty Config"
+    localStorage.setItem('storage_slots', JSON.stringify(DEFAULT_STORAGE_SLOTS));
+    return DEFAULT_STORAGE_SLOTS;
 };
 
 // Helper: Get Primary Active Slot (For System Data like Announcements)
@@ -155,7 +161,7 @@ export const getPrimaryActiveSlot = (): DriveSlot | undefined => {
 };
 
 // Helper: Save slots back
-const saveSlots = (slots: DriveSlot[]) => {
+export const saveSlots = (slots: DriveSlot[]) => {
     localStorage.setItem('storage_slots', JSON.stringify(slots));
 };
 

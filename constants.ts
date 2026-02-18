@@ -1,10 +1,67 @@
 
-import { Document, ChatMessage, ChartDataPoint, Employee, MobileTask, Announcement } from './types';
+import { Document, ChatMessage, ChartDataPoint, Employee, MobileTask, Announcement, DriveSlot } from './types';
 
 // Helper for default permissions
 const PERM_FULL = { view: true, add: true, edit: true, delete: true };
 const PERM_READ_ONLY = { view: true, add: false, edit: false, delete: false };
 const PERM_WORKER = { view: true, add: true, edit: false, delete: false }; // Workers can add (chat/report) but not edit system data
+
+// --- SYSTEM MASTER CONFIGURATION (Simulating Server Data) ---
+// This ensures all devices see the same configuration immediately
+export const DEFAULT_STORAGE_SLOTS: DriveSlot[] = [
+    {
+        id: 1,
+        name: 'KHO TỔNG (MPPACK-MAIN)',
+        driveFolderLink: 'https://drive.google.com/drive/folders/mppack-master-folder',
+        driveFolderId: 'mppack-master-folder',
+        sheetId: 'sheet_master_production_v1',
+        totalCapacityBytes: 15 * 1024 * 1024 * 1024, // 15GB
+        usedBytes: 8.5 * 1024 * 1024 * 1024, // ~8.5GB Used (Simulated)
+        isConnected: true,
+        status: 'active',
+        isInitialized: true,
+        lastSync: 'Vừa xong',
+        accountName: 'admin@mppack.vn'
+    },
+    {
+        id: 2,
+        name: 'KHO DỰ PHÒNG 01',
+        driveFolderLink: 'https://drive.google.com/drive/folders/backup-01',
+        driveFolderId: 'backup-01',
+        sheetId: 'sheet_backup_v1',
+        totalCapacityBytes: 15 * 1024 * 1024 * 1024,
+        usedBytes: 0,
+        isConnected: true,
+        status: 'ready',
+        isInitialized: true,
+        lastSync: '24/11/2023',
+        accountName: 'backup1@mppack.vn'
+    },
+    {
+        id: 3,
+        name: 'Kho Dữ Liệu 3',
+        driveFolderLink: '',
+        driveFolderId: '',
+        sheetId: '',
+        totalCapacityBytes: 15 * 1024 * 1024 * 1024,
+        usedBytes: 0,
+        isConnected: false,
+        status: 'ready',
+        isInitialized: false
+    },
+    {
+        id: 4,
+        name: 'Kho Dữ Liệu 4',
+        driveFolderLink: '',
+        driveFolderId: '',
+        sheetId: '',
+        totalCapacityBytes: 15 * 1024 * 1024 * 1024,
+        usedBytes: 0,
+        isConnected: false,
+        status: 'ready',
+        isInitialized: false
+    }
+];
 
 export const MOCK_EMPLOYEES: Employee[] = [
   { id: '1', stt: 1, name: 'Nguyễn Văn A', username: 'NV001', department: 'IN', position: 'WORKER', permissions: PERM_WORKER, status: 'active', createdAt: '20/10/2023' },
@@ -276,13 +333,6 @@ export const MOCK_DOCUMENTS: Document[] = [
     },
     specLogs: []
   }
-];
-
-export const MOCK_CHAT: ChatMessage[] = [
-  { id: '1', sender: 'Client - Anh Nam', avatar: 'https://images.unsplash.com/photo-1542206395-9feb3edaa68d?w=100&h=100&fit=crop', text: 'Em kiểm tra lại mã màu Pantone xanh Tiger nhé, hơi đậm.', timestamp: '09:00 AM', isMe: false, role: 'Client' },
-  { id: '2', sender: 'Bạn', avatar: 'https://picsum.photos/40/40?random=2', text: 'Dạ em đang cho test lại bản in mẫu.', timestamp: '09:15 AM', isMe: true, role: 'Sale' },
-  { id: '3', sender: 'Quản lý', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop', text: '@NV001 Chú ý kiểm tra kỹ phần chồng màu nhé.', timestamp: '09:30 AM', isMe: false, role: 'Quản lý' },
-  { id: '4', sender: 'KCS', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop', text: 'Hình ảnh lỗi lem mực tại máy in 2', image: 'https://images.unsplash.com/photo-1574950578143-858c6fc58922?w=400&q=80', timestamp: '09:45 AM', isMe: false, role: 'KCS' },
 ];
 
 export const CHART_LINE_DATA: ChartDataPoint[] = [

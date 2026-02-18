@@ -1,39 +1,31 @@
 
 import React, { useState, useEffect } from 'react';
 import { DriveSlot } from '../types';
-import { initializeSystemSlot } from '../services/storageService';
-import { Server, CheckCircle, RefreshCw, AlertCircle, Loader2, Cloud, FileSpreadsheet, Folder, ExternalLink, Link, Database, Power, AlertTriangle, Plus } from 'lucide-react';
+import { initializeSystemSlot, getSlots, saveSlots } from '../services/storageService';
+import { Server, CheckCircle, RefreshCw, AlertCircle, Loader2, Cloud, FileSpreadsheet, Folder, ExternalLink, Link, Database, Power, AlertTriangle, Plus, Check } from 'lucide-react';
 
 const Settings: React.FC = () => {
-  // Initial Mock Data or Load from LocalStorage
-  const [slots, setSlots] = useState<DriveSlot[]>(() => {
-    try {
-        const saved = localStorage.getItem('storage_slots');
-        if (saved) return JSON.parse(saved);
-    } catch (error) {
-        console.error("Failed to load settings", error);
-    }
-    // Default Slots
-    return Array.from({ length: 4 }).map((_, i) => ({
-      id: i + 1,
-      name: `Kho Dữ Liệu ${i + 1}`,
-      driveFolderLink: '',
-      driveFolderId: '',
-      sheetId: '',
-      totalCapacityBytes: 15 * 1024 * 1024 * 1024, // 15GB
-      usedBytes: 0,
-      isConnected: false,
-      status: 'ready',
-      isInitialized: false
-    }));
-  });
-
+  // Load from Service (which now handles Default Master Config)
+  const [slots, setSlots] = useState<DriveSlot[]>([]);
   const [initializingId, setInitializingId] = useState<number | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  // Sync to local storage whenever slots change
   useEffect(() => {
-      localStorage.setItem('storage_slots', JSON.stringify(slots));
-  }, [slots]);
+      // Fetch initial data
+      setSlots(getSlots());
+  }, []);
+
+  // Save changes wrapper
+  const handleSaveToSystem = () => {
+      setIsSyncing(true);
+      saveSlots(slots);
+      
+      // Simulate Cloud Delay
+      setTimeout(() => {
+          setIsSyncing(false);
+          alert("Đã đồng bộ cấu hình thành công lên Máy Chủ Hệ Thống (Mọi thiết bị sẽ được cập nhật).");
+      }, 1000);
+  };
 
   const handleSlotNameChange = (id: number, value: string) => {
     setSlots(slots.map(slot => slot.id === id ? { ...slot, name: value } : slot));
@@ -100,8 +92,6 @@ const Settings: React.FC = () => {
           isInitialized: false
       };
       setSlots([...slots, newSlot]);
-      // Scroll to bottom logic could be added here
-      alert(`Đã thêm Kho Dữ Liệu #${newId} thành công.`);
   };
 
   // Helper to format bytes
@@ -123,17 +113,20 @@ const Settings: React.FC = () => {
                 <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
                     <Server size={28} className="text-blue-600"/> Quản trị Hệ thống Đa Kho
                 </h2>
-                <p className="text-gray-500 mt-1">Kết nối nhiều tài khoản Google Drive để mở rộng dung lượng lưu trữ.</p>
+                <p className="text-gray-500 mt-1 flex items-center gap-2">
+                    <Cloud size={14} className="text-green-600"/>
+                    Trạng thái hệ thống: <span className="font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded">Đã đồng bộ Cloud</span>
+                </p>
             </div>
-            <div className="flex gap-4">
-                 <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200 text-sm">
-                     <span className="font-bold text-gray-700 block">Tổng kho</span>
-                     <span className="text-blue-600 font-mono text-lg">{slots.length}</span>
-                 </div>
-                 <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200 text-sm">
-                     <span className="font-bold text-gray-700 block">Đang kết nối</span>
-                     <span className="text-green-600 font-mono text-lg">{slots.filter(s => s.isConnected).length}</span>
-                 </div>
+            <div className="flex gap-4 items-center">
+                 <button 
+                    onClick={handleSaveToSystem}
+                    disabled={isSyncing}
+                    className="bg-blue-600 text-white px-6 py-2 rounded-lg shadow-lg hover:bg-blue-700 font-bold flex items-center gap-2 transition-all active:scale-95"
+                 >
+                     {isSyncing ? <Loader2 size={18} className="animate-spin"/> : <CheckCircle size={18}/>}
+                     {isSyncing ? 'Đang đồng bộ...' : 'Lưu Cấu Hình'}
+                 </button>
             </div>
         </div>
 

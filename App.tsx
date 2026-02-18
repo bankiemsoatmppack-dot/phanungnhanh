@@ -457,7 +457,8 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen w-full bg-soft-bg font-sans overflow-hidden">
+    // UPDATED: Used h-[100dvh] instead of h-screen to fit exactly in mobile browser viewport
+    <div className="flex flex-col h-[100dvh] w-full bg-soft-bg font-sans overflow-hidden">
       
       {/* GLOBAL TOAST NOTIFICATIONS */}
       <GlobalToast toasts={toasts} onRemove={removeToast} onClick={handleAlertClick} />
@@ -612,6 +613,7 @@ const App: React.FC = () => {
                             <DocumentDetail 
                                 document={selectedDoc} 
                                 onUpdateDocument={handleUpdateDocument}
+                                currentUser={user} // UPDATED: Pass user prop
                             />
                         )
                      )}
