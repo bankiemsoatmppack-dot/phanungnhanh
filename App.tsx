@@ -46,24 +46,45 @@ const App: React.FC = () => {
   // Check storage configuration and Missing Solutions on mount/update
   useEffect(() => {
      const checkSystem = () => {
-         // 1. Config Check (Revised for Auto-Init)
+         // 1. Config Check (Revised logic for Multi-slot)
+         let hasValidConfig = false;
          try {
              const saved = localStorage.getItem('storage_slots');
-             if (!saved) {
-                 setIsConfigMissing(true);
-             } else {
+             if (saved) {
                  const slots = JSON.parse(saved);
-                 const activeSlot = slots.find((s: any) => s.isActive);
-                 // Check if active slot exists AND is initialized (created files)
-                 if (!activeSlot || !activeSlot.isInitialized) {
-                     setIsConfigMissing(true);
-                 } else {
-                     setIsConfigMissing(false);
-                 }
+                 // FIX: Check for 'isConnected' AND 'isInitialized' (Created Sheet/Folder)
+                 // We only need AT LEAST ONE working slot to remove the warning
+                 hasValidConfig = slots.some((s: any) => s.isConnected && s.isInitialized);
              }
          } catch (e) {
-             setIsConfigMissing(true);
+             hasValidConfig = false;
          }
+
+         // Update Warning Banner State
+         setIsConfigMissing(!hasValidConfig);
+
+         // Update Announcements Tab (System Alert Logic)
+         setAnnouncements(prev => {
+            const alertId = 'sys_alert_config_missing';
+            const hasAlert = prev.some(a => a.id === alertId);
+
+            if (!hasValidConfig && !hasAlert) {
+                // ADD System Alert if config missing and alert not present
+                return [{
+                    id: alertId,
+                    title: '⚠️ SỰ CỐ HỆ THỐNG: CHƯA CÓ KHO LƯU TRỮ',
+                    content: 'Hệ thống chưa tìm thấy kết nối đến Google Drive/Sheet. Dữ liệu hiện tại chỉ được lưu tạm thời trên trình duyệt. Vui lòng vào Cấu hình để khắc phục ngay.',
+                    date: new Date().toLocaleDateString('en-GB'),
+                    author: 'SYSTEM ADMIN',
+                    readLog: []
+                }, ...prev];
+            } else if (hasValidConfig && hasAlert) {
+                // REMOVE System Alert if config is fixed
+                return prev.filter(a => a.id !== alertId);
+            }
+            return prev;
+         });
+
 
          // 2. Missing Solutions Check (Quét dữ liệu lỗi)
          const missing: {docId: string, docTitle: string, defectId: string, defectContent: string}[] = [];
@@ -88,7 +109,7 @@ const App: React.FC = () => {
      };
      
      checkSystem();
-     const interval = setInterval(checkSystem, 5000); // Check every 5s
+     const interval = setInterval(checkSystem, 2000); // Check every 2s for faster feedback
      return () => clearInterval(interval);
   }, [documents]);
 
@@ -203,14 +224,14 @@ const App: React.FC = () => {
     <div className="flex flex-col h-screen w-full bg-soft-bg font-sans overflow-hidden">
       {/* Config Warning Banner */}
       {isConfigMissing && (
-          <div className="bg-red-600 text-white px-4 py-2 text-sm font-bold flex justify-between items-center shadow-md z-[60]">
+          <div className="bg-red-600 text-white px-4 py-2 text-sm font-bold flex justify-between items-center shadow-md z-[60] animate-in slide-in-from-top-2 duration-300">
               <div className="flex items-center gap-2">
                   <AlertTriangle size={18} className="animate-pulse"/>
                   <span>CẢNH BÁO: Chưa cấu hình kết nối Lưu trữ (Google Drive / Sheets). Dữ liệu sẽ không được lưu trực tuyến!</span>
               </div>
               <button 
                 onClick={() => setCurrentView('SETTINGS')}
-                className="bg-white text-red-600 px-3 py-1 rounded-full text-xs hover:bg-red-50 flex items-center gap-1"
+                className="bg-white text-red-600 px-3 py-1 rounded-full text-xs hover:bg-red-50 flex items-center gap-1 font-bold"
               >
                   <SettingsIcon size={12}/> Cấu hình ngay
               </button>
