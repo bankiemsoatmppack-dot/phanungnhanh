@@ -81,7 +81,6 @@ const Login: React.FC<Props> = ({ onLogin }) => {
             <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           </div>
           <h1 className="text-xl font-bold text-gray-800 text-center uppercase">PHẢN ỨNG NHANH - MPPACK</h1>
-          <p className="text-gray-500 text-sm mt-1">Hệ thống Quản lý Sản xuất & Hồ sơ</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -120,17 +119,6 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           <div className="flex items-center">
             <input id="remember" type="checkbox" className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" />
             <label htmlFor="remember" className="ml-2 text-sm text-gray-700 font-medium">Ghi nhớ đăng nhập</label>
-          </div>
-
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-800">
-            <p className="font-bold mb-1">Gợi ý đăng nhập (Demo):</p>
-            <div className="grid grid-cols-2 gap-2 text-[11px] text-blue-700">
-                <div>• giamdoc (Chỉ xem)</div>
-                <div>• phogiamdoc (Full quyền)</div>
-                <div>• tpkcs / tpsx (Full quyền)</div>
-                <div>• it (Chỉ xem)</div>
-                <div>• NV001 (Công nhân)</div>
-            </div>
           </div>
 
           <button 
