@@ -103,7 +103,10 @@ const App: React.FC = () => {
   });
 
   // Calculate notification count (UNREAD ANNOUNCEMENTS)
-  const unreadAnnouncementsCount = user ? announcements.filter(a => !a.readBy.includes(user.id)).length : 0;
+  // UPDATED LOGIC FOR NEW READLOG STRUCTURE
+  const unreadAnnouncementsCount = user 
+      ? announcements.filter(a => !a.readLog.some(log => log.userId === user.id)).length 
+      : 0;
 
   const handleUpdateDocument = (updatedDoc: Document) => {
     setDocuments(prevDocs => 
@@ -154,8 +157,15 @@ const App: React.FC = () => {
   const handleMarkAnnouncementAsRead = (id: string) => {
       if (!user) return;
       setAnnouncements(prev => prev.map(ann => {
-          if (ann.id === id && !ann.readBy.includes(user.id)) {
-              return { ...ann, readBy: [...ann.readBy, user.id] };
+          // Check if already read
+          if (ann.id === id && !ann.readLog.some(log => log.userId === user.id)) {
+              // Add new log entry with timestamp
+              const newEntry = {
+                  userId: user.id,
+                  userName: user.name,
+                  timestamp: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' ' + new Date().toLocaleDateString('en-GB')
+              };
+              return { ...ann, readLog: [...ann.readLog, newEntry] };
           }
           return ann;
       }));

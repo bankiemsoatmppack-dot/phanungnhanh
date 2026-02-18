@@ -22,13 +22,19 @@ export interface Employee {
   createdAt: string;
 }
 
+export interface ReadLogEntry {
+    userId: string;
+    userName: string;
+    timestamp: string; // DD/MM/YYYY HH:mm
+}
+
 export interface Announcement {
   id: string;
   title: string;
   content: string;
   date: string; // DD/MM/YYYY
   author: string;
-  readBy: string[]; // List of User IDs who have read this
+  readLog: ReadLogEntry[]; // Replaces simple string[] to track time
 }
 
 export interface MobileTask {

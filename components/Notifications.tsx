@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Announcement, User } from '../types';
 import { MOCK_EMPLOYEES } from '../constants';
-import { Bell, Megaphone, Send, CheckCircle, Eye, Calendar, Plus, Trash2, User as UserIcon } from 'lucide-react';
+import { Bell, Megaphone, Send, CheckCircle, Eye, Calendar, Plus, Trash2, User as UserIcon, Clock, X } from 'lucide-react';
 
 interface Props {
   user: User; // Current User to check read status
@@ -15,6 +15,9 @@ const Notifications: React.FC<Props> = ({ user, announcements, onMarkAsRead, onC
   const [activeTab, setActiveTab] = useState<'LIST' | 'CREATE'>('LIST');
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
+  
+  // State for Read Details Modal
+  const [selectedAnnouncementForDetails, setSelectedAnnouncementForDetails] = useState<Announcement | null>(null);
 
   // Sort by Date (Descending)
   const sortedList = [...announcements].sort((a, b) => {
@@ -35,7 +38,7 @@ const Notifications: React.FC<Props> = ({ user, announcements, onMarkAsRead, onC
           content: newContent,
           date: new Date().toLocaleDateString('en-GB'),
           author: user.name, // Admin Name
-          readBy: []
+          readLog: []
       };
       
       onCreateAnnouncement(newAnn);
@@ -46,7 +49,7 @@ const Notifications: React.FC<Props> = ({ user, announcements, onMarkAsRead, onC
   };
 
   return (
-    <div className="flex-1 bg-gray-50 p-6 overflow-y-auto">
+    <div className="flex-1 bg-gray-50 p-6 overflow-y-auto relative">
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-6">
             <div className="flex items-center gap-3">
@@ -115,9 +118,9 @@ const Notifications: React.FC<Props> = ({ user, announcements, onMarkAsRead, onC
                     <div className="text-center py-12 text-gray-400">Chưa có thông báo nào.</div>
                 ) : (
                     sortedList.map(item => {
-                        const isRead = item.readBy.includes(user.id);
-                        const readCount = item.readBy.length;
-                        const totalUsers = MOCK_EMPLOYEES.length; // Approximate total
+                        const isRead = item.readLog.some(log => log.userId === user.id);
+                        const readCount = item.readLog.length;
+                        const totalUsers = MOCK_EMPLOYEES.length; 
 
                         return (
                             <div 
@@ -160,14 +163,17 @@ const Notifications: React.FC<Props> = ({ user, announcements, onMarkAsRead, onC
                                 {/* ADMIN VIEW: READ STATS */}
                                 {user.role === 'ADMIN' && (
                                     <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
-                                        <div className="flex items-center gap-2 text-gray-600">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); setSelectedAnnouncementForDetails(item); }}
+                                            className="flex items-center gap-2 text-blue-600 hover:text-blue-800 transition-colors"
+                                        >
                                             <Eye size={14} /> 
-                                            <span className="font-bold">Đã xem: {readCount} / {totalUsers} nhân viên</span>
-                                        </div>
+                                            <span className="font-bold underline">Đã xem: {readCount} / {totalUsers} nhân viên</span>
+                                        </button>
                                         <div className="flex -space-x-2 overflow-hidden">
-                                            {item.readBy.slice(0, 5).map((readerId, idx) => (
-                                                <div key={idx} className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-gray-200 flex items-center justify-center text-[8px] font-bold text-gray-600" title={`User ID: ${readerId}`}>
-                                                    {MOCK_EMPLOYEES.find(e => e.id === readerId)?.name.charAt(0) || 'U'}
+                                            {item.readLog.slice(0, 5).map((log, idx) => (
+                                                <div key={idx} className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-gray-200 flex items-center justify-center text-[8px] font-bold text-gray-600" title={`${log.userName} (${log.timestamp})`}>
+                                                    {log.userName.charAt(0)}
                                                 </div>
                                             ))}
                                             {readCount > 5 && (
@@ -185,6 +191,57 @@ const Notifications: React.FC<Props> = ({ user, announcements, onMarkAsRead, onC
             </div>
         )}
       </div>
+
+      {/* READ DETAILS MODAL */}
+      {selectedAnnouncementForDetails && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
+                  <div className="bg-blue-600 p-4 text-white rounded-t-xl flex justify-between items-center shrink-0">
+                      <div>
+                          <h3 className="font-bold text-sm">Chi tiết người xem</h3>
+                          <p className="text-xs opacity-80 truncate max-w-[250px]">{selectedAnnouncementForDetails.title}</p>
+                      </div>
+                      <button onClick={() => setSelectedAnnouncementForDetails(null)}><X size={20}/></button>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-0">
+                      <table className="w-full text-sm text-left">
+                          <thead className="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0">
+                              <tr>
+                                  <th className="px-4 py-3">Nhân viên</th>
+                                  <th className="px-4 py-3">Thời gian xem</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                              {selectedAnnouncementForDetails.readLog.length === 0 ? (
+                                  <tr>
+                                      <td colSpan={2} className="px-4 py-8 text-center text-gray-400 italic">Chưa có ai xem thông báo này.</td>
+                                  </tr>
+                              ) : (
+                                selectedAnnouncementForDetails.readLog.map((log, idx) => (
+                                    <tr key={idx} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3 font-medium text-gray-800 flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                                                {log.userName.charAt(0)}
+                                            </div>
+                                            {log.userName}
+                                        </td>
+                                        <td className="px-4 py-3 text-gray-500 font-mono text-xs">
+                                            {log.timestamp}
+                                        </td>
+                                    </tr>
+                                ))
+                              )}
+                          </tbody>
+                      </table>
+                  </div>
+                  
+                  <div className="p-3 border-t border-gray-200 bg-gray-50 text-center rounded-b-xl">
+                      <button onClick={() => setSelectedAnnouncementForDetails(null)} className="px-6 py-2 bg-white border border-gray-300 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-100">Đóng</button>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

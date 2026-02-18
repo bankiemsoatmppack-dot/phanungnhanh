@@ -49,8 +49,8 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
       code: '', // Phiếu SX
   });
 
-  // Derived: Unread Announcements Count
-  const unreadAnnouncementsCount = announcements.filter(a => !a.readBy.includes(user.id)).length;
+  // Derived: Unread Announcements Count (Updated Logic for ReadLog)
+  const unreadAnnouncementsCount = announcements.filter(a => !a.readLog.some(log => log.userId === user.id)).length;
 
   // Derived selected document
   const selectedDoc = documents.find(d => d.id === selectedDocId) || null;
@@ -573,7 +573,8 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
                           <div className="text-center text-gray-400 py-6">Chưa có thông báo mới</div>
                       ) : (
                           announcements.map(ann => {
-                              const isRead = ann.readBy.includes(user.id);
+                              // UPDATED CHECK: Check if user exists in readLog array
+                              const isRead = ann.readLog.some(log => log.userId === user.id);
                               return (
                                   <div 
                                     key={ann.id} 

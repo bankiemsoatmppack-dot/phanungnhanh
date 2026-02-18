@@ -16,7 +16,10 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
         content: 'Sáng mai 08:00 ngày 25/11 có đoàn kiểm tra chất lượng từ Heineken. Yêu cầu các bộ phận 5S khu vực sản xuất sạch sẽ.',
         date: '24/11/2023',
         author: 'Ban Giám Đốc',
-        readBy: ['2', '4'] // Employee IDs who read this
+        readLog: [
+            { userId: '2', userName: 'Trần Thị B', timestamp: '08:15 24/11/2023' },
+            { userId: '4', userName: 'Phạm Thị D', timestamp: '09:30 24/11/2023' }
+        ]
     },
     {
         id: 'a2',
@@ -24,7 +27,7 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
         content: 'Máy In Flexo 01 sẽ dừng bảo trì từ 12:00 đến 14:00 hôm nay. Kế hoạch sản xuất đã được điều chỉnh.',
         date: '24/11/2023',
         author: 'Phòng Kỹ Thuật',
-        readBy: []
+        readLog: []
     }
 ];
 
