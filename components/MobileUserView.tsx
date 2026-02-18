@@ -40,6 +40,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
 
   // File Input Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   
   // Modal State (Create New Profile)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -67,6 +68,13 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
         Notification.requestPermission();
     }
   }, []);
+
+  // Auto scroll to bottom of chat
+  useEffect(() => {
+      if (selectedDocId && chatEndRef.current) {
+          chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+  }, [messages, selectedDocId]);
 
   // Map Documents to MobileTasks interface for display
   const tasks: MobileTask[] = documents.map(doc => ({
@@ -294,10 +302,10 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
             ) : (
                 messages.map((msg) => (
                     <div key={msg.id} className={`flex gap-2 ${msg.isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                        {/* Removed Avatar, Using Name Text instead */}
+                        {/* Message Bubble Logic */}
                         <div className={`max-w-[80%] flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
                         <span className={`text-[11px] font-bold ml-1 mb-0.5 ${msg.isMe ? 'text-blue-700' : 'text-gray-700'}`}>
-                            {msg.sender}
+                            {msg.isMe ? 'Tôi' : msg.sender}
                         </span>
                         
                         <div className={`p-3 rounded-xl text-sm shadow-sm ${
@@ -333,6 +341,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
                     </div>
                 ))
             )}
+            <div ref={chatEndRef} />
             </div>
 
             {/* Input Area */}

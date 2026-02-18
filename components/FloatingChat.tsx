@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, User, Minus, Users, Circle, MoreVertical, Wifi, WifiOff } from 'lucide-react';
+import { MessageCircle, X, Send, User, Minus, Users, Circle, MoreVertical, Wifi, WifiOff, GripHorizontal } from 'lucide-react';
 import { User as AppUser } from '../types';
 import { MOCK_EMPLOYEES } from '../constants';
 import { getOnlineUserIds, getInternalGroupMessages, sendInternalGroupMessage } from '../services/storageService';
@@ -33,30 +33,67 @@ const AVATAR_COLORS = ['bg-red-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple
 const FloatingChat: React.FC<Props> = ({ user }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [isMinimized, setIsMinimized] = useState(false);
-    const [showMembers, setShowMembers] = useState(false); // Toggle Member List
+    const [showMembers, setShowMembers] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [members, setMembers] = useState<ChatMember[]>([]);
     
+    // Dragging State
+    const [position, setPosition] = useState({ x: window.innerWidth - 100, y: window.innerHeight - 150 });
+    const [isDragging, setIsDragging] = useState(false);
+    const dragOffset = useRef({ x: 0, y: 0 });
+    
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // 1. POLLING for ONLINE MEMBERS and CHAT HISTORY
+    // --- DRAG LOGIC ---
     useEffect(() => {
-        // Function to refresh data
+        const handleMouseMove = (e: MouseEvent) => {
+            if (isDragging) {
+                setPosition({
+                    x: e.clientX - dragOffset.current.x,
+                    y: e.clientY - dragOffset.current.y
+                });
+            }
+        };
+
+        const handleMouseUp = () => {
+            setIsDragging(false);
+        };
+
+        if (isDragging) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        }
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isDragging]);
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        // Prevent drag when clicking controls like close/minimize
+        if ((e.target as HTMLElement).closest('button')) return;
+        
+        setIsDragging(true);
+        dragOffset.current = {
+            x: e.clientX - position.x,
+            y: e.clientY - position.y
+        };
+    };
+
+    // --- DATA POLLING ---
+    useEffect(() => {
         const refreshData = () => {
-            // A. Get Online IDs from Storage (Real-time Simulation)
             const onlineIds = getOnlineUserIds();
-            
-            // B. Map Mock Employees to Online Status
             const updatedMembers = MOCK_EMPLOYEES.map((emp, index) => ({
                 id: emp.id,
                 name: emp.name,
-                isOnline: onlineIds.includes(emp.id) || emp.id === user.id, // Current user always online
+                isOnline: onlineIds.includes(emp.id) || emp.id === user.id,
                 avatarColor: AVATAR_COLORS[index % AVATAR_COLORS.length],
                 department: emp.department
             }));
 
-            // Ensure current user (if admin not in mock) is added
             if (!updatedMembers.find(m => m.id === user.id)) {
                  updatedMembers.push({
                     id: user.id,
@@ -68,27 +105,23 @@ const FloatingChat: React.FC<Props> = ({ user }) => {
             }
             setMembers(updatedMembers);
 
-            // C. Sync Chat History
             const storedMsgs = getInternalGroupMessages();
             const formattedMsgs = storedMsgs.map((m: any) => ({
                 ...m,
                 isMe: m.senderId === user.id
             }));
             
-            // Only update if length changed to avoid jitter, or deep check
             setMessages(prev => {
                 if (prev.length !== formattedMsgs.length) return formattedMsgs;
                 return prev;
             });
         };
 
-        refreshData(); // Initial load
-        const interval = setInterval(refreshData, 2000); // Poll every 2 seconds
-
+        refreshData();
+        const interval = setInterval(refreshData, 2000);
         return () => clearInterval(interval);
     }, [user.id]);
 
-    // Scroll to bottom when messages change
     useEffect(() => {
         if (isOpen) {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -107,23 +140,28 @@ const FloatingChat: React.FC<Props> = ({ user }) => {
             avatarColor: members.find(m => m.id === user.id)?.avatarColor || 'bg-blue-600'
         };
         
-        // Save to Local Storage (Shared across tabs)
         sendInternalGroupMessage(newMsg);
         setInput('');
     };
 
     const onlineCount = members.filter(m => m.isOnline).length;
 
+    // --- RENDER ---
+    
+    // 1. Minimized Bubble State
     if (!isOpen) {
         return (
-            <div className="fixed bottom-28 right-6 z-50 flex flex-col items-end gap-2">
+            <div 
+                className="fixed z-[100] cursor-move active:cursor-grabbing"
+                style={{ left: position.x, top: position.y }}
+                onMouseDown={handleMouseDown}
+            >
                 <button 
                     onClick={() => setIsOpen(true)}
-                    className="w-14 h-14 bg-blue-600 rounded-full text-white shadow-xl flex items-center justify-center hover:bg-blue-700 hover:scale-110 transition-all animate-bounce relative"
-                    title="Chat nhóm nội bộ"
+                    className="w-14 h-14 bg-blue-600 rounded-full text-white shadow-xl flex items-center justify-center hover:bg-blue-700 transition-transform hover:scale-105 relative"
+                    title="Kéo để di chuyển"
                 >
                     <MessageCircle size={28} />
-                    {/* Online Indicator Badge */}
                     <span className="absolute top-0 right-0 w-4 h-4 bg-green-500 border-2 border-white rounded-full flex items-center justify-center text-[8px] font-bold">
                         {onlineCount}
                     </span>
@@ -132,15 +170,20 @@ const FloatingChat: React.FC<Props> = ({ user }) => {
         );
     }
 
+    // 2. Minimized Bar State
     if (isMinimized) {
          return (
             <div 
-                className="fixed bottom-28 right-6 w-72 bg-white rounded-t-lg shadow-xl border border-blue-200 z-50 flex justify-between items-center p-3 cursor-pointer hover:bg-gray-50"
-                onClick={() => setIsMinimized(false)}
+                className="fixed z-[100] w-72 bg-white rounded-t-lg shadow-xl border border-blue-200 flex justify-between items-center p-3 cursor-move hover:bg-gray-50 select-none"
+                style={{ left: position.x, top: position.y }}
+                onMouseDown={handleMouseDown}
             >
-                <div className="flex items-center gap-2 font-bold text-blue-700 text-sm">
+                <div 
+                    className="flex items-center gap-2 font-bold text-blue-700 text-sm flex-1"
+                    onClick={() => setIsMinimized(false)}
+                >
                     <Users size={16} /> 
-                    <span>Nhóm Nội Bộ ({onlineCount} Online)</span>
+                    <span>Nhóm Nội Bộ ({onlineCount})</span>
                 </div>
                 <div className="flex items-center gap-1">
                     <button 
@@ -154,13 +197,22 @@ const FloatingChat: React.FC<Props> = ({ user }) => {
         );
     }
 
+    // 3. Full Chat Window
     return (
         <div 
-            className={`fixed bottom-28 right-6 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 duration-300 transition-all`}
-            style={{ height: '500px', width: showMembers ? '600px' : '380px' }} // Expand width when members shown
+            className={`fixed bg-white rounded-xl shadow-2xl border border-gray-200 z-[100] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200`}
+            style={{ 
+                left: position.x - (showMembers ? 300 : 190), // Adjust alignment to center on mouse
+                top: position.y - 500, // Anchor bottom
+                height: '500px', 
+                width: showMembers ? '600px' : '380px' 
+            }}
         >
-            {/* Header */}
-            <div className="bg-blue-600 p-3 flex justify-between items-center text-white shrink-0">
+            {/* Draggable Header */}
+            <div 
+                className="bg-blue-600 p-3 flex justify-between items-center text-white shrink-0 cursor-move select-none"
+                onMouseDown={handleMouseDown}
+            >
                 <div className="flex items-center gap-2">
                     <div className="relative">
                         <Users size={20} />
@@ -174,6 +226,7 @@ const FloatingChat: React.FC<Props> = ({ user }) => {
                     </div>
                 </div>
                 <div className="flex gap-1 items-center">
+                    <GripHorizontal size={16} className="opacity-50 mr-2"/>
                     <button 
                         onClick={() => setShowMembers(!showMembers)} 
                         className={`p-1.5 rounded hover:bg-blue-700 transition-colors ${showMembers ? 'bg-blue-800' : ''}`}
@@ -209,7 +262,11 @@ const FloatingChat: React.FC<Props> = ({ user }) => {
                                         </div>
                                     )}
                                     <div className={`flex flex-col max-w-[75%] ${msg.isMe ? 'items-end' : 'items-start'}`}>
-                                        {!msg.isMe && <span className="text-[10px] text-gray-500 ml-1 mb-0.5">{msg.senderName}</span>}
+                                        {/* Name Display: "Tôi" vs "Full Name" */}
+                                        <span className="text-[10px] text-gray-500 ml-1 mb-0.5 font-bold">
+                                            {msg.isMe ? 'Tôi' : msg.senderName}
+                                        </span>
+                                        
                                         <div className={`px-3 py-2 rounded-xl text-sm break-words shadow-sm ${
                                             msg.isMe 
                                                 ? 'bg-blue-600 text-white rounded-tr-none' 
@@ -252,7 +309,6 @@ const FloatingChat: React.FC<Props> = ({ user }) => {
                             Thành viên ({members.length})
                         </div>
                         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                            {/* Sort: Online first, then by name */}
                             {[...members].sort((a, b) => (a.isOnline === b.isOnline ? 0 : a.isOnline ? -1 : 1)).map(member => (
                                 <div key={member.id} className={`flex items-center gap-2 p-2 rounded transition-colors cursor-default ${member.isOnline ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
                                     <div className="relative">

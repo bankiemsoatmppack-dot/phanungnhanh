@@ -507,7 +507,8 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                     <div className={`max-w-[80%] flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
                         <div className="flex items-center gap-2 mb-1">
                              <span className={`text-xs font-bold ${msg.isMe ? 'text-blue-700' : 'text-gray-700'}`}>
-                                 {msg.sender}
+                                 {/* Display Name Logic: "Tôi" vs Full Name */}
+                                 {msg.isMe ? 'Tôi' : msg.sender}
                              </span>
                              <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 rounded-full">{msg.role}</span>
                         </div>
