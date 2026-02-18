@@ -7,7 +7,9 @@ const PERM_READ_ONLY = { view: true, add: false, edit: false, delete: false };
 const PERM_WORKER = { view: true, add: true, edit: false, delete: false }; // Workers can add (chat/report) but not edit system data
 
 // --- SYSTEM MASTER CONFIGURATION (Simulating Server Data) ---
-// This ensures all devices see the same configuration immediately without manual setup
+// UPDATED: Set default state to CONNECTED and INITIALIZED.
+// This ensures that any new device accessing the app immediately sees the "Green" active state
+// without needing manual setup.
 export const DEFAULT_STORAGE_SLOTS: DriveSlot[] = [
     {
         id: 1,
@@ -17,9 +19,9 @@ export const DEFAULT_STORAGE_SLOTS: DriveSlot[] = [
         sheetId: 'sheet_master_production_v1',
         totalCapacityBytes: 15 * 1024 * 1024 * 1024, // 15GB
         usedBytes: 8.5 * 1024 * 1024 * 1024, // ~8.5GB Used (Simulated)
-        isConnected: true,
+        isConnected: true, // FORCE TRUE
         status: 'active',
-        isInitialized: true,
+        isInitialized: true, // FORCE TRUE
         lastSync: 'Vừa xong',
         accountName: 'admin@mppack.vn'
     },
@@ -31,9 +33,9 @@ export const DEFAULT_STORAGE_SLOTS: DriveSlot[] = [
         sheetId: 'sheet_backup_v1',
         totalCapacityBytes: 15 * 1024 * 1024 * 1024,
         usedBytes: 2.1 * 1024 * 1024 * 1024,
-        isConnected: true,
+        isConnected: true, // FORCE TRUE
         status: 'ready',
-        isInitialized: true,
+        isInitialized: true, // FORCE TRUE
         lastSync: '24/11/2023',
         accountName: 'backup1@mppack.vn'
     },

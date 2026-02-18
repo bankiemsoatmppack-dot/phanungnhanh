@@ -6,8 +6,10 @@ import { MOCK_ANNOUNCEMENTS, MOCK_DOCUMENTS, MOCK_EMPLOYEES, DEFAULT_STORAGE_SLO
 const HARD_LIMIT_BYTES = 15 * 1024 * 1024 * 1024; // 15GB (Google Drive Limit)
 const SAFE_LIMIT_BYTES = 11 * 1024 * 1024 * 1024; // 11GB (Safe Threshold for new docs)
 
-// UPDATED: Versioned key to force all devices to reload the new DEFAULT_STORAGE_SLOTS
-const STORAGE_CONFIG_KEY = 'mppack_storage_config_v2'; 
+// UPDATED: Changed Key to 'v3_server_synced'.
+// This invalidates old local storage data on mobile/other devices and forces them 
+// to load the new "connected" DEFAULT_STORAGE_SLOTS from constants.ts.
+const STORAGE_CONFIG_KEY = 'mppack_storage_config_v3_server_synced'; 
 
 // --- PRESENCE SERVICE (Real-time Online Status) ---
 export const updatePresence = (userId: string) => {
