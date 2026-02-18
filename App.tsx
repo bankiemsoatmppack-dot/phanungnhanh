@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import DocumentList from './components/DocumentList';
+import POList from './components/POList';
 import DocumentDetail from './components/DocumentDetail';
 import Dashboard from './components/Dashboard';
 import AddDocumentModal from './components/AddDocumentModal';
@@ -11,46 +12,91 @@ import EmployeeManager from './components/EmployeeManager';
 import Notifications from './components/Notifications';
 import Settings from './components/Settings';
 import { MOCK_DOCUMENTS } from './constants';
-import { Document, User } from './types';
-import { Plus, AlertTriangle, Settings as SettingsIcon } from 'lucide-react';
+import { Document, User, DefectEntry } from './types';
+import { Plus, AlertTriangle, Settings as SettingsIcon, ClipboardList, ArrowRight } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<string>('DASHBOARD');
   const [documents, setDocuments] = useState<Document[]>(MOCK_DOCUMENTS);
+  
+  // Selection State
   const [selectedDocId, setSelectedDocId] = useState<string>(MOCK_DOCUMENTS[0].id);
+  const [selectedProductKey, setSelectedProductKey] = useState<string>(''); // Format: "Sender|Title"
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isConfigMissing, setIsConfigMissing] = useState(false);
+  
+  // State for missing solution notifications
+  const [missingSolutions, setMissingSolutions] = useState<{docId: string, docTitle: string, defectId: string, defectContent: string}[]>([]);
 
-  // Check storage configuration on mount
+  // Init selection based on first doc
   useEffect(() => {
-     const checkConfig = () => {
+      if (documents.length > 0 && !selectedProductKey) {
+          const first = documents[0];
+          setSelectedProductKey(`${first.sender}|${first.title}`);
+          setSelectedDocId(first.id);
+      }
+  }, []);
+
+  // Check storage configuration and Missing Solutions on mount/update
+  useEffect(() => {
+     const checkSystem = () => {
+         // 1. Config Check (Revised for Auto-Init)
          try {
              const saved = localStorage.getItem('storage_slots');
              if (!saved) {
                  setIsConfigMissing(true);
-                 return;
-             }
-             const slots = JSON.parse(saved);
-             const activeSlot = slots.find((s: any) => s.isActive);
-             if (!activeSlot || !activeSlot.driveFolderId || !activeSlot.sheetId) {
-                 setIsConfigMissing(true);
              } else {
-                 setIsConfigMissing(false);
+                 const slots = JSON.parse(saved);
+                 const activeSlot = slots.find((s: any) => s.isActive);
+                 // Check if active slot exists AND is initialized (created files)
+                 if (!activeSlot || !activeSlot.isInitialized) {
+                     setIsConfigMissing(true);
+                 } else {
+                     setIsConfigMissing(false);
+                 }
              }
          } catch (e) {
              setIsConfigMissing(true);
          }
+
+         // 2. Missing Solutions Check (Quét dữ liệu lỗi)
+         const missing: {docId: string, docTitle: string, defectId: string, defectContent: string}[] = [];
+         documents.forEach(doc => {
+             if (doc.defects) {
+                 doc.defects.forEach(defect => {
+                     // Check if solution is empty or essentially empty
+                     if (!defect.solution || defect.solution.trim().length < 2) {
+                         // Determine content for display
+                         const content = defect.song || defect.in || defect.thanhPham || defect.kho || 'Lỗi chưa xác định';
+                         missing.push({
+                             docId: doc.id,
+                             docTitle: doc.title,
+                             defectId: defect.id,
+                             defectContent: content
+                         });
+                     }
+                 });
+             }
+         });
+         setMissingSolutions(missing);
      };
      
-     checkConfig();
-     // Optional: Poll every few seconds or listen to storage events if needed
-     const interval = setInterval(checkConfig, 2000);
+     checkSystem();
+     const interval = setInterval(checkSystem, 5000); // Check every 5s
      return () => clearInterval(interval);
-  }, []);
+  }, [documents]);
 
   // Derived state for selected document to ensure we always have the latest version
   const selectedDoc = documents.find(d => d.id === selectedDocId) || documents[0];
+  
+  // Derived state for PO List (Filtered by selected Product)
+  const filteredPOs = documents.filter(d => {
+      if (!selectedProductKey) return false;
+      const [sender, title] = selectedProductKey.split('|');
+      return d.sender === sender && d.title === title;
+  });
 
   // Calculate notification count (pending approval items)
   const notificationCount = documents.reduce((acc, doc) => {
@@ -67,13 +113,39 @@ const App: React.FC = () => {
       setDocuments(prev => [newDoc, ...prev]);
       // If Admin is adding, select it immediately
       if (user?.role === 'ADMIN') {
+        setSelectedProductKey(`${newDoc.sender}|${newDoc.title}`);
         setSelectedDocId(newDoc.id);
       }
   };
 
   const handleSelectDocumentFromNotification = (doc: Document) => {
+      setSelectedProductKey(`${doc.sender}|${doc.title}`);
       setSelectedDocId(doc.id);
       setCurrentView('DOCUMENTS');
+  };
+
+  const handleFixSolution = (docId: string) => {
+      const doc = documents.find(d => d.id === docId);
+      if (doc) {
+          setSelectedProductKey(`${doc.sender}|${doc.title}`);
+          setSelectedDocId(docId);
+          setCurrentView('DOCUMENTS');
+      }
+  };
+
+  const handleProductSelect = (sender: string, title: string) => {
+      setSelectedProductKey(`${sender}|${title}`);
+      // Auto select the latest PO for this product
+      const relatedDocs = documents.filter(d => d.sender === sender && d.title === title);
+      if (relatedDocs.length > 0) {
+           // Sort descending date
+           relatedDocs.sort((a, b) => {
+              const dateA = a.date.split('/').reverse().join('');
+              const dateB = b.date.split('/').reverse().join('');
+              return dateB.localeCompare(dateA);
+           });
+           setSelectedDocId(relatedDocs[0].id);
+      }
   };
 
   // 1. If not logged in, show Login Screen
@@ -113,8 +185,35 @@ const App: React.FC = () => {
           </div>
       )}
 
+      {/* MISSING SOLUTION WARNING LIST */}
+      {missingSolutions.length > 0 && currentView !== 'SETTINGS' && (
+          <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 z-50 flex items-center justify-between">
+              <div className="flex items-center gap-2 overflow-hidden">
+                 <div className="bg-orange-100 p-1 rounded text-orange-600 animate-pulse">
+                     <ClipboardList size={16} />
+                 </div>
+                 <div className="flex flex-col">
+                     <span className="text-xs font-bold text-orange-800">
+                         CẦN KHẮC PHỤC: Có {missingSolutions.length} lỗi chưa nhập giải pháp!
+                     </span>
+                     <span className="text-[10px] text-orange-600 truncate max-w-md">
+                         Vui lòng cập nhật giải pháp cho: {missingSolutions.map(m => m.docTitle).join(', ')}
+                     </span>
+                 </div>
+              </div>
+              <div className="flex gap-2">
+                 <button 
+                    onClick={() => handleFixSolution(missingSolutions[0].docId)}
+                    className="text-xs bg-orange-600 text-white px-3 py-1 rounded hover:bg-orange-700 font-bold flex items-center gap-1"
+                 >
+                    Cập nhật ngay <ArrowRight size={10} />
+                 </button>
+              </div>
+          </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar Navigation */}
+        {/* Column 1: Sidebar Navigation */}
         <Sidebar 
             currentView={currentView} 
             onChangeView={setCurrentView} 
@@ -137,24 +236,44 @@ const App: React.FC = () => {
                 />
             )}
 
-            {/* ADMIN VIEW 2: DOCUMENTS */}
+            {/* ADMIN VIEW 2: DOCUMENTS (4-COLUMN LAYOUT) */}
             {currentView === 'DOCUMENTS' && (
             <div className="flex-1 flex h-full relative">
-                {/* Column 2: Document List */}
-                <div className={`flex w-full md:w-[350px] lg:w-[400px] h-full z-10 shadow-lg`}>
+                
+                {/* Column 2: Product List (Grouped) */}
+                <div className={`flex w-[250px] lg:w-[300px] h-full z-20 shadow-sm border-r border-gray-200 bg-white`}>
                     <DocumentList 
                         documents={documents} 
-                        selectedId={selectedDocId}
-                        onSelect={(doc) => setSelectedDocId(doc.id)}
+                        selectedProductKey={selectedProductKey}
+                        onSelectProduct={handleProductSelect}
                         onOpenAddModal={() => setIsAddModalOpen(true)}
                     />
                 </div>
-                {/* Column 3: Document Details */}
-                <div className="hidden md:flex flex-1 p-4 h-full bg-soft-bg overflow-hidden">
-                    <DocumentDetail 
-                        document={selectedDoc} 
-                        onUpdateDocument={handleUpdateDocument}
+
+                {/* Column 3: PO List (Versions) - NEW */}
+                <div className="flex w-[200px] lg:w-[250px] h-full z-10 bg-gray-50 border-r border-gray-200">
+                    <POList 
+                        productName={selectedProductKey ? selectedProductKey.split('|')[1] : ''}
+                        documents={filteredPOs}
+                        selectedDocId={selectedDocId}
+                        onSelectPO={(id) => setSelectedDocId(id)}
                     />
+                </div>
+
+                {/* Column 4: Document Details */}
+                <div className="flex flex-1 h-full bg-soft-bg overflow-hidden relative">
+                     {/* Empty State if no PO selected */}
+                     {filteredPOs.length === 0 ? (
+                         <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                             <ClipboardList size={48} className="mb-2 opacity-20"/>
+                             <p>Chọn sản phẩm để xem hồ sơ</p>
+                         </div>
+                     ) : (
+                        <DocumentDetail 
+                            document={selectedDoc} 
+                            onUpdateDocument={handleUpdateDocument}
+                        />
+                     )}
                 </div>
             </div>
             )}
@@ -182,17 +301,6 @@ const App: React.FC = () => {
         <AddDocumentModal onClose={() => setIsAddModalOpen(false)} />
       )}
       
-      {/* Floating Action Button for Adding Document in Admin View */}
-      {currentView === 'DOCUMENTS' && (
-          <button 
-             onClick={() => setIsAddModalOpen(true)}
-             className="hidden md:flex absolute bottom-8 left-28 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-2xl transition-transform hover:scale-105 z-50 items-center justify-center"
-             title="Thêm văn bản mới"
-          >
-             <Plus size={24} />
-          </button>
-      )}
-
     </div>
   );
 };

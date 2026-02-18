@@ -4,7 +4,8 @@ import { User as AppUser, MobileTask, ChatMessage, Document } from '../types';
 import { MOCK_MOBILE_CHAT } from '../constants';
 import ImageViewer from './ImageViewer';
 import { compressImage, sendBrowserNotification } from '../utils';
-import { LogOut, Search, Folder, Clock, Check, ArrowLeft, Image as ImageIcon, Send, Plus, X, Calendar, User } from 'lucide-react';
+import { LogOut, Search, Folder, Clock, Check, ArrowLeft, Image as ImageIcon, Send, Plus, X, Calendar, User, ChevronDown, Layers, FilePlus } from 'lucide-react';
+import { saveChatToSheet, assignSlotForNewDocument } from '../services/storageService';
 
 interface Props {
   user: AppUser;
@@ -21,10 +22,15 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
   const [viewImage, setViewImage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // PO Management State
+  const [showPOSwitcher, setShowPOSwitcher] = useState(false);
+  const [isNewPOModalOpen, setIsNewPOModalOpen] = useState(false);
+  const [newPOValue, setNewPOValue] = useState('');
+
   // File Input Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Modal State
+  // Modal State (Create New Profile)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newProfile, setNewProfile] = useState({
       sender: '', // Mục lớn
@@ -35,6 +41,11 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
   // Derived selected document
   const selectedDoc = documents.find(d => d.id === selectedDocId) || null;
   const messages = selectedDoc?.messages || []; // Use messages from the specific document
+
+  // Find related POs for the current selected document
+  const relatedPOs = selectedDoc 
+    ? documents.filter(d => d.sender === selectedDoc.sender && d.title === selectedDoc.title)
+    : [];
 
   // Request Notification Permission on mount
   useEffect(() => {
@@ -103,6 +114,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
       id: Date.now().toString(),
       sender: user.name, // Use actual logged in user name
       role: user.role === 'ADMIN' ? 'Quản lý' : 'Bạn',
+      department: user.department || 'SX',
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
       text: chatMessage,
       images: images,
@@ -115,6 +127,37 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
     onUpdateDocument({ ...selectedDoc, messages: updatedMessages });
     
     setChatMessage('');
+    
+    // Sync to Sheet (Pass the full document for routing)
+    saveChatToSheet(newMessage, selectedDoc);
+  };
+
+  const handleCreatePO = () => {
+      if (!selectedDoc || !newPOValue.trim()) return;
+
+      const assignedSlotId = assignSlotForNewDocument();
+      const today = new Date();
+      const dateStr = `${today.getDate().toString().padStart(2,'0')}/${(today.getMonth()+1).toString().padStart(2,'0')}/${today.getFullYear()}`;
+
+      const newDoc: Document = {
+          ...selectedDoc, // Clone basic info
+          id: Date.now().toString(),
+          productionOrder: newPOValue, // New PO
+          date: dateStr,
+          status: 'processing',
+          messages: [], // Clear chat
+          approvalItems: [], // Clear approvals
+          defects: [], // Clear defects
+          specLogs: [],
+          storageSlotId: assignedSlotId // Assign new slot if needed or inherit logic
+      };
+
+      onAddDocument(newDoc);
+      setSelectedDocId(newDoc.id); // Switch to new doc
+      setIsNewPOModalOpen(false);
+      setShowPOSwitcher(false);
+      setNewPOValue('');
+      alert(`Đã tạo phiếu SX mới: ${newPOValue}`);
   };
 
   const handleSaveNewProfile = (e: React.FormEvent) => {
@@ -123,6 +166,9 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
           alert("Vui lòng nhập đầy đủ thông tin!");
           return;
       }
+
+      // ASSIGN STORAGE SLOT (Routing Logic)
+      const assignedSlotId = assignSlotForNewDocument();
 
       const today = new Date();
       const dateStr = `${today.getDate().toString().padStart(2,'0')}/${(today.getMonth()+1).toString().padStart(2,'0')}/${today.getFullYear()}`;
@@ -145,7 +191,8 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
           defects: [],
           specLogs: [],
           approvalItems: [],
-          messages: [] // Empty chat for new doc
+          messages: [], // Empty chat for new doc
+          storageSlotId: assignedSlotId // ASSIGNED SLOT
       };
 
       onAddDocument(newDoc);
@@ -160,29 +207,71 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
     return (
       <div className="flex flex-col h-[100dvh] bg-gray-100">
         {/* Header */}
-        <div className="bg-[#0060AF] text-white p-4 flex items-center justify-between shadow-md">
-           <div className="flex items-center gap-3 overflow-hidden">
-             <button onClick={() => setSelectedDocId(null)} className="p-1 hover:bg-white/10 rounded">
-                <ArrowLeft size={24} />
-             </button>
-             <div className="flex flex-col overflow-hidden">
-                <h2 className="font-bold text-sm truncate w-full">{selectedDoc.title}</h2>
-                <div className="flex text-[10px] gap-2 opacity-80">
-                   <span className="bg-white/20 px-1 rounded">{selectedDoc.code}</span>
-                   <span className="text-blue-200">{selectedDoc.productionOrder}</span>
-                </div>
-             </div>
+        <div className="bg-[#0060AF] text-white pt-4 pb-2 px-4 shadow-md z-20">
+           <div className="flex items-center justify-between mb-2">
+               <button onClick={() => setSelectedDocId(null)} className="p-1 hover:bg-white/10 rounded">
+                  <ArrowLeft size={24} />
+               </button>
+               <div className="flex flex-col items-center max-w-[70%]">
+                  <h2 className="font-bold text-sm truncate w-full text-center">{selectedDoc.title}</h2>
+                  <span className="text-[10px] opacity-80">{selectedDoc.sender}</span>
+               </div>
+               <button onClick={() => setSelectedDocId(null)} className="bg-red-50 text-red-500 text-xs px-2 py-1 rounded border border-red-100">
+                 Thoát
+               </button>
            </div>
-           <button onClick={() => setSelectedDocId(null)} className="bg-red-50 text-red-500 text-xs px-2 py-1 rounded border border-red-100">
-             Thoát
-           </button>
+           
+           {/* PO Switcher / Indicator */}
+           <div className="relative">
+               <button 
+                 onClick={() => setShowPOSwitcher(!showPOSwitcher)}
+                 className="w-full bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg p-2 flex items-center justify-between transition-colors"
+               >
+                   <div className="flex items-center gap-2">
+                       <Layers size={16} className="text-yellow-400"/>
+                       <div className="flex flex-col items-start">
+                           <span className="text-[9px] uppercase opacity-70">Phiếu Sản Xuất</span>
+                           <span className="text-sm font-bold text-yellow-100">{selectedDoc.productionOrder || 'Chưa có PO'}</span>
+                       </div>
+                   </div>
+                   <ChevronDown size={16} className={`transition-transform ${showPOSwitcher ? 'rotate-180' : ''}`}/>
+               </button>
+
+               {/* PO Dropdown */}
+               {showPOSwitcher && (
+                   <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden text-gray-800 animate-in fade-in zoom-in-95 duration-200 origin-top">
+                       <div className="max-h-60 overflow-y-auto">
+                           {relatedPOs.map(po => (
+                               <button 
+                                  key={po.id}
+                                  onClick={() => { setSelectedDocId(po.id); setShowPOSwitcher(false); }}
+                                  className={`w-full text-left px-4 py-3 border-b border-gray-100 flex items-center justify-between ${po.id === selectedDocId ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-gray-50'}`}
+                               >
+                                   <div>
+                                       <div className="text-xs">{po.productionOrder || 'No Code'}</div>
+                                       <div className="text-[9px] text-gray-500">{po.date}</div>
+                                   </div>
+                                   {po.id === selectedDocId && <Check size={14} />}
+                               </button>
+                           ))}
+                       </div>
+                       <button 
+                          onClick={() => setIsNewPOModalOpen(true)}
+                          className="w-full p-3 bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-2 hover:bg-blue-700"
+                       >
+                           <Plus size={14}/> Tạo Phiếu SX Mới
+                       </button>
+                   </div>
+               )}
+           </div>
         </div>
 
         {/* Chat Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
            {messages.length === 0 ? (
                <div className="text-center py-10 text-gray-400 text-sm italic">
-                   Chưa có tin nhắn nào. Hãy bắt đầu trao đổi.
+                   Chưa có tin nhắn nào cho <strong>{selectedDoc.productionOrder}</strong>. <br/>
+                   Hãy bắt đầu trao đổi hoặc chụp ảnh lỗi.
                </div>
            ) : (
                messages.map((msg) => (
@@ -197,17 +286,6 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
                     }`}>
                         {msg.text && <p className="mb-1">{msg.text}</p>}
                         
-                        {/* Backward Compatibility for single image */}
-                        {msg.image && (
-                            <img 
-                                src={msg.image} 
-                                onClick={() => setViewImage(msg.image!)}
-                                className="mt-1 rounded-lg max-w-full h-auto border border-black/10 cursor-zoom-in" 
-                                alt="attachment" 
-                            />
-                        )}
-
-                        {/* Multiple Images Grid */}
                         {msg.images && msg.images.length > 0 && (
                             <div className={`grid gap-1 mt-1 ${msg.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                 {msg.images.map((img, idx) => (
@@ -221,6 +299,14 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
                                 ))}
                             </div>
                         )}
+                         {msg.image && (
+                            <img 
+                                src={msg.image} 
+                                onClick={() => setViewImage(msg.image!)}
+                                className="mt-1 rounded-lg max-w-full h-auto border border-black/10 cursor-zoom-in" 
+                                alt="attachment" 
+                            />
+                        )}
                     </div>
                     
                     <span className="text-[9px] text-gray-400 mt-1 mx-1">{msg.timestamp}</span>
@@ -230,7 +316,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
            )}
         </div>
 
-        {/* Input Area with Extra Bottom Padding for Mobile Nav Bar */}
+        {/* Input Area */}
         <div className="bg-white p-3 pb-8 border-t border-gray-200 flex items-center gap-3">
            <input 
               type="file" 
@@ -264,6 +350,35 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
            </button>
         </div>
 
+        {/* New PO Modal */}
+        {isNewPOModalOpen && (
+             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                 <div className="bg-white rounded-xl shadow-2xl w-full max-w-xs overflow-hidden animate-in zoom-in-95 duration-200">
+                     <div className="bg-blue-600 p-4 text-white">
+                         <h3 className="font-bold">Thêm Phiếu SX Mới</h3>
+                         <p className="text-xs opacity-80 mt-1">{selectedDoc.title}</p>
+                     </div>
+                     <div className="p-4 space-y-4">
+                         <div>
+                             <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Mã Phiếu SX</label>
+                             <input 
+                                type="text" 
+                                value={newPOValue}
+                                onChange={(e) => setNewPOValue(e.target.value)}
+                                placeholder="VD: PO-2024-001"
+                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none"
+                                autoFocus
+                             />
+                         </div>
+                         <div className="flex gap-2">
+                             <button onClick={() => setIsNewPOModalOpen(false)} className="flex-1 py-2 text-sm text-gray-600 font-bold bg-gray-100 rounded hover:bg-gray-200">Hủy</button>
+                             <button onClick={handleCreatePO} className="flex-1 py-2 text-sm text-white font-bold bg-blue-600 rounded hover:bg-blue-700">Tạo mới</button>
+                         </div>
+                     </div>
+                 </div>
+             </div>
+        )}
+
         {/* Full Screen Image Viewer Modal */}
         {viewImage && (
             <ImageViewer src={viewImage} onClose={() => setViewImage(null)} />
@@ -272,6 +387,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
     );
   }
 
+  // ... (Rest of MobileUserView - Home List remains same)
   // View: HOME / LIST
   return (
     <div className="flex flex-col h-[100dvh] bg-white relative">

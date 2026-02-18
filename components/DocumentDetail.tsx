@@ -4,7 +4,8 @@ import { Document, TabType, ChatMessage, DefectEntry, ApprovalItem, SpecLogEntry
 import { MOCK_CHAT, MOCK_DOCUMENTS } from '../constants';
 import ImageViewer from './ImageViewer';
 import { compressImage } from '../utils';
-import { Send, Paperclip, Save, Printer, Share2, MoreHorizontal, PenTool, Layers, Palette, Ruler, AlertCircle, MessageSquare, Trash2, CheckCircle, RefreshCcw, Image as ImageIcon, Download, FileSpreadsheet, ClipboardCheck, FileText, Table, Calendar, User, Building, AlertTriangle, Edit3, X, History, Eye } from 'lucide-react';
+import { saveChatToSheet, saveHoSoToSheet, uploadToGoogleDrive } from '../services/storageService';
+import { Send, Paperclip, Save, Printer, Share2, MoreHorizontal, PenTool, Layers, Palette, Ruler, AlertCircle, MessageSquare, Trash2, CheckCircle, RefreshCcw, Image as ImageIcon, Download, FileSpreadsheet, ClipboardCheck, FileText, Table, Calendar, User, Building, AlertTriangle, Edit3, X, History, Eye, Link, Database, Cloud } from 'lucide-react';
 
 interface Props {
   document: Document;
@@ -37,8 +38,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
     if (document.messages && document.messages.length > 0) {
         setMessages(document.messages);
     } else {
-        // Only load mock chat if it's one of the hardcoded initial mock documents
-        // For newly created documents, messages should be empty
         const isMockDoc = MOCK_DOCUMENTS.some(d => d.id === document.id);
         setMessages(isMockDoc ? MOCK_CHAT : []);
     }
@@ -55,11 +54,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
 
   // Handle Switching PO
   const handleSwitchPO = (docId: string) => {
-      // In a real app, this would route to the new ID. 
-      // Since `DocumentDetail` is controlled by `App.tsx`, we can't switch directly here without a callback to App.
-      // However, the prompt implies functionality within the detail view.
-      // For this mock, I will assume the parent passes a way to switch or the user uses the sidebar.
-      // But to make it work here visually:
       alert("Vui lòng chọn Phiếu SX tương ứng bên menu trái để chuyển đổi dữ liệu chính xác.");
   };
 
@@ -109,7 +103,8 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
         images: images,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isMe: true,
-        role: 'Sale'
+        role: 'Sale',
+        department: document.department
     };
     
     const newMessagesList = [...messages, newMessage];
@@ -152,10 +147,13 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
     }
     
     onUpdateDocument(updatedDoc);
+    
+    // SYNC: Save chat to Google Sheet Online
+    // PASS THE DOCUMENT to determine correct Storage Slot
+    saveChatToSheet(newMessage, document);
   };
 
-  const handleSaveCategoryToLog = (category: 'SÓNG' | 'IN' | 'THÀNH PHẨM' | 'KHO' | 'TCKT', manualContent: string, manualSolution: string) => {
-      // Only save to current document
+  const handleSaveCategoryToLog = async (category: 'SÓNG' | 'IN' | 'THÀNH PHẨM' | 'KHO' | 'TCKT', manualContent: string, manualSolution: string) => {
       const pendingItems = (document.approvalItems || []).filter(i => i.category === category && i.status === 'pending');
       const combinedContent = [manualContent, ...pendingItems.map(i => i.content)].filter(Boolean).join('. ');
       const combinedImages = pendingItems.map(i => i.image).filter((img): img is string => !!img);
@@ -167,13 +165,27 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
           return;
       }
 
+      // 1. Upload Images to Drive first to get Links (ROUTING AWARE)
+      const uploadedImageLinks: string[] = [];
+      if (combinedImages.length > 0) {
+          // In a real app, these base64 strings would be converted to blobs and uploaded
+          // For now, we simulate the upload call
+          for (let i = 0; i < combinedImages.length; i++) {
+              // Create a dummy blob for simulation
+              const blob = await (await fetch(combinedImages[i])).blob();
+              const link = await uploadToGoogleDrive(blob, `img_${category}_${i}.jpg`, document.storageSlotId);
+              uploadedImageLinks.push(link);
+          }
+      }
+
+      // 2. TCKT Specific Logic
       if (category === 'TCKT') {
         const specEntry: SpecLogEntry = {
             id: Date.now().toString(),
             date: new Date().toLocaleDateString('en-GB'),
             productionOrder: document.productionOrder || '',
             content: combinedContent,
-            images: combinedImages,
+            images: combinedImages, // Keep base64 for local display
             result: manualSolution,
             reporter: finalReporter
         };
@@ -189,6 +201,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
         return;
       }
 
+      // 3. Defects (HoSo) Logic
       const defectEntry: DefectEntry = {
           id: Date.now().toString(),
           date: new Date().toLocaleDateString('en-GB'),
@@ -202,8 +215,13 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
           kho: category === 'KHO' ? combinedContent : '',
           khoImages: category === 'KHO' ? combinedImages : [],
           solution: manualSolution,
-          reporter: finalReporter
+          reporter: finalReporter,
+          isSynced: true,
+          missingSolution: !manualSolution // Flag if solution is missing
       };
+
+      // 4. Save to Google Sheet (HoSo)
+      await saveHoSoToSheet(document, defectEntry, finalReporter, category, uploadedImageLinks);
 
       const idsToRemove = pendingItems.map(i => i.id);
       const updatedApprovals = (document.approvalItems || []).filter(i => !idsToRemove.includes(i.id));
@@ -213,7 +231,12 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
           defects: [...(document.defects || []), defectEntry],
           approvalItems: updatedApprovals
       });
-      alert(`Đã lưu dữ liệu ${category} vào Nhật ký lỗi!`);
+
+      if (!manualSolution) {
+          alert(`Đã lưu lỗi ${category}. LƯU Ý: Bạn chưa nhập cách khắc phục! Hệ thống sẽ tạo thông báo nhắc nhở.`);
+      } else {
+          alert(`Đã lưu dữ liệu ${category} và đồng bộ Sheet thành công!`);
+      }
   };
 
   const tabs: {id: TabType, label: string}[] = [
@@ -269,6 +292,11 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
              <div className="flex-1">
                 <div className="text-xs font-bold text-blue-600 uppercase mb-1 tracking-wide flex items-center gap-2">
                     <Building size={12}/> {document.sender}
+                    <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
+                    <Cloud size={12} className="text-green-600"/>
+                    <span className="text-gray-500 font-normal normal-case">
+                        Lưu trữ tại: <strong className="text-green-700">Kho {document.storageSlotId || 'N/A'}</strong>
+                    </span>
                 </div>
                 <h2 className="text-xl font-bold text-gray-800 leading-tight mb-2">{document.title}</h2>
                 
@@ -288,12 +316,9 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                         </select>
                     </div>
                     
-                    <div className="flex items-center gap-2">
-                         <span className={`px-2 py-1 rounded text-xs font-bold border ${
-                             document.status === 'approved' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                         }`}>
-                             {document.status === 'approved' ? 'Đã duyệt' : 'Đang xử lý'}
-                         </span>
+                    {/* Storage Info Badge - Column 3 Enhancement */}
+                    <div className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200" title="Dữ liệu và Hình ảnh được lưu tại Kho này">
+                        <Database size={12} /> Kho {document.storageSlotId}
                     </div>
                 </div>
              </div>
@@ -381,6 +406,13 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                                 <span className="text-xs text-gray-400">({document.department})</span>
                             </div>
                         </div>
+                        
+                        <div className="flex flex-col">
+                            <span className="text-xs text-gray-500 uppercase font-semibold">Nơi lưu trữ</span>
+                            <div className="flex items-center gap-2 font-medium text-green-700">
+                                <Database size={14} className="text-green-500"/> Kho {document.storageSlotId} (An toàn)
+                            </div>
+                        </div>
 
                          <div className="md:col-span-2 pt-2">
                              <span className="text-xs text-gray-500 uppercase font-semibold">Mô tả / Trích yếu</span>
@@ -393,6 +425,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
 
                  {/* 1.2 TCKT (Technical Specs) Management */}
                  <div className={`rounded-xl border shadow-sm transition-all duration-300 ${!document.specs ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}>
+                    {/* ... (Existing TCKT UI) ... */}
                     <div className="p-4 border-b border-gray-200/50 flex justify-between items-center">
                          <h3 className={`text-sm font-bold uppercase flex items-center gap-2 ${!document.specs ? 'text-red-700' : 'text-gray-800'}`}>
                             <Ruler size={16} /> Thông số kỹ thuật (TCKT)
@@ -424,7 +457,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                              )}
                          </div>
                     </div>
-
+                    {/* ... (Existing TCKT Content) ... */}
                     <div className="p-6">
                         {!document.specs && !isEditingSpecs ? (
                             <div className="text-center py-8">
@@ -442,7 +475,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {/* Dimensions */}
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase">Kích thước</label>
                                     {isEditingSpecs ? (
@@ -457,8 +489,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                                         <div className="font-bold text-gray-800 text-base">{document.specs?.dimensions}</div>
                                     )}
                                 </div>
-
-                                {/* Material */}
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase">Chất liệu giấy</label>
                                     {isEditingSpecs ? (
@@ -473,8 +503,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                                         <div className="font-bold text-gray-800">{document.specs?.material}</div>
                                     )}
                                 </div>
-
-                                {/* Flute */}
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase">Loại sóng</label>
                                     {isEditingSpecs ? (
@@ -495,8 +523,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                                         <div className="font-bold text-gray-800">{document.specs?.flute}</div>
                                     )}
                                 </div>
-
-                                {/* Print Tech */}
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase">Công nghệ in</label>
                                     {isEditingSpecs ? (
@@ -511,8 +537,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                                         <div className="font-bold text-gray-800">{document.specs?.printTech}</div>
                                     )}
                                 </div>
-
-                                {/* Colors */}
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase">Màu sắc</label>
                                     {isEditingSpecs ? (
@@ -533,8 +557,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                                         </div>
                                     )}
                                 </div>
-
-                                {/* Net Weight */}
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase">Khối lượng tịnh</label>
                                     {isEditingSpecs ? (
@@ -551,9 +573,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                                 </div>
                             </div>
                         )}
-                        
-                        {/* Note for Admin */}
-                        {isEditingSpecs && (
+                         {isEditingSpecs && (
                             <div className="mt-6 bg-blue-50 p-3 rounded text-xs text-blue-700 flex items-start gap-2">
                                 <AlertCircle size={16} className="flex-shrink-0 mt-0.5"/>
                                 <span>Lưu ý: Chỉ Admin hoặc người phụ trách mới có quyền chỉnh sửa TCKT. Dữ liệu này sẽ được đồng bộ sang bộ phận Sản xuất.</span>
@@ -564,7 +584,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
              </div>
         )}
 
-        {/* TAB 2: CHAT ONLINE */}
+        {/* TAB 2: CHAT ONLINE (Existing Code) */}
         {activeTab === 'CHAT' && (
           <div className="flex flex-col h-full">
             <div className="bg-yellow-50 text-yellow-800 text-xs p-2 mb-2 rounded border border-yellow-100 flex items-center gap-2">
@@ -588,8 +608,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                             msg.isMe ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 border border-gray-100 hover:border-blue-300'
                         }`}>
                             <p>{msg.text}</p>
-                            
-                            {/* Display Multiple Images */}
                             {msg.images && msg.images.length > 0 && (
                                 <div className={`grid gap-1 mt-2 ${msg.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                     {msg.images.map((img, idx) => (
@@ -603,8 +621,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                                     ))}
                                 </div>
                             )}
-                            
-                            {/* Legacy Single Image */}
                             {msg.image && (
                                 <img 
                                     src={msg.image} 
@@ -651,7 +667,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
           </div>
         )}
 
-        {/* TAB 3: APPROVE & SAVE */}
+        {/* TAB 3: APPROVE & SAVE (Existing Code) */}
         {(activeTab === 'APPROVE') && (
             <div className="space-y-4 h-full flex flex-col">
                 <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
@@ -666,10 +682,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                        </div>
                    </div>
                 </div>
-
-                {/* Grid Layout including TCKT */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 flex-1 overflow-y-auto">
-                    {/* TCKT gets its own focused quadrant */}
                     <div className="md:col-span-2 lg:col-span-1">
                         {renderApproveQuadrant('TCKT', <Ruler size={16} />, 'text-teal-600')}
                     </div>
@@ -704,7 +717,7 @@ const Quadrant = ({ category, items, icon, colorClass, onSave, onDelete, onUpdat
     // ... (Same Quadrant code as before) ...
     const [content, setContent] = useState('');
     const [solution, setSolution] = useState('');
-    const solutionPlaceholder = category === 'TCKT' ? 'Kết quả / Ghi chú...' : 'Cách khắc phục...';
+    const solutionPlaceholder = category === 'TCKT' ? 'Kết quả / Ghi chú...' : 'Cách khắc phục (Bắt buộc)...';
     const btnText = category === 'TCKT' ? 'Lưu TCKT' : `Lưu ${category}`;
 
     return (
@@ -763,14 +776,20 @@ const Quadrant = ({ category, items, icon, colorClass, onSave, onDelete, onUpdat
                     className="w-full border border-gray-200 rounded px-3 py-2 text-xs focus:border-blue-400 outline-none"
                     disabled={isViewAll}
                 />
-                <input 
-                    type="text" 
-                    value={solution}
-                    onChange={(e) => setSolution(e.target.value)}
-                    placeholder={solutionPlaceholder}
-                    className="w-full border border-gray-200 rounded px-3 py-2 text-xs focus:border-blue-400 outline-none"
-                    disabled={isViewAll}
-                />
+                <div className="relative">
+                    <input 
+                        type="text" 
+                        value={solution}
+                        onChange={(e) => setSolution(e.target.value)}
+                        placeholder={solutionPlaceholder}
+                        className={`w-full border rounded px-3 py-2 text-xs focus:outline-none ${!solution && !isViewAll ? 'border-red-300 focus:border-red-500 bg-red-50' : 'border-gray-200 focus:border-blue-400'}`}
+                        disabled={isViewAll}
+                    />
+                    {!solution && !isViewAll && (
+                        <span className="absolute right-2 top-2 text-red-500"><AlertCircle size={14}/></span>
+                    )}
+                </div>
+                
                 <button 
                     onClick={() => {
                         onSave(content, solution);
@@ -778,11 +797,16 @@ const Quadrant = ({ category, items, icon, colorClass, onSave, onDelete, onUpdat
                         setSolution('');
                     }}
                     disabled={isViewAll}
-                    className={`w-full py-2 rounded text-xs font-bold uppercase transition-colors ${
+                    className={`w-full py-2 rounded text-xs font-bold uppercase transition-colors flex items-center justify-center gap-2 ${
                         isViewAll ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : `${colorClass.replace('text-', 'bg-').replace('600', '100')} ${colorClass} hover:brightness-95`
                     }`}
                 >
-                    {isViewAll ? 'Chỉ xem (Không lưu)' : btnText}
+                    {isViewAll ? 'Chỉ xem (Không lưu)' : (
+                        <>
+                           {btnText}
+                           <Link size={12} className="opacity-50"/>
+                        </>
+                    )}
                 </button>
             </div>
         </div>

@@ -1,55 +1,96 @@
 
 import React, { useState, useEffect } from 'react';
-import { StorageConfig, DriveSlot } from '../types';
-import { Save, Server, CheckCircle, RefreshCw, Plus } from 'lucide-react';
+import { DriveSlot } from '../types';
+import { initializeSystemSlot } from '../services/storageService';
+import { Server, CheckCircle, RefreshCw, AlertCircle, Loader2, Cloud, FileSpreadsheet, Folder, ExternalLink, Link, Database, Power, AlertTriangle } from 'lucide-react';
 
 const Settings: React.FC = () => {
   // Initial Mock Data or Load from LocalStorage
   const [slots, setSlots] = useState<DriveSlot[]>(() => {
     try {
-        // Try to load from local storage or default to 10 empty slots
         const saved = localStorage.getItem('storage_slots');
         if (saved) return JSON.parse(saved);
     } catch (error) {
-        console.error("Failed to load settings from storage", error);
+        console.error("Failed to load settings", error);
     }
-
-    return Array.from({ length: 10 }).map((_, i) => ({
+    // Default Slots
+    return Array.from({ length: 4 }).map((_, i) => ({
       id: i + 1,
-      name: `Kho lưu trữ ${i + 1}`,
+      name: `Kho Dữ Liệu ${i + 1}`,
+      driveFolderLink: '',
       driveFolderId: '',
       sheetId: '',
-      capacityUsed: Math.floor(Math.random() * 20), // Mock initial random usage
-      isActive: i === 0, // First one active by default
-      status: i === 0 ? 'active' : 'ready'
+      totalCapacityBytes: 15 * 1024 * 1024 * 1024, // 15GB
+      usedBytes: 0,
+      isConnected: false,
+      status: 'ready',
+      isInitialized: false
     }));
   });
 
-  const handleSlotChange = (id: number, field: keyof DriveSlot, value: string) => {
-    setSlots(slots.map(slot => slot.id === id ? { ...slot, [field]: value } : slot));
+  const [initializingId, setInitializingId] = useState<number | null>(null);
+
+  // Sync to local storage whenever slots change
+  useEffect(() => {
+      localStorage.setItem('storage_slots', JSON.stringify(slots));
+  }, [slots]);
+
+  const handleSlotNameChange = (id: number, value: string) => {
+    setSlots(slots.map(slot => slot.id === id ? { ...slot, name: value } : slot));
   };
 
-  const handleSetActive = (id: number) => {
-    setSlots(slots.map(slot => ({
-      ...slot,
-      isActive: slot.id === id,
-      status: slot.id === id ? 'active' : (slot.status === 'full' ? 'full' : 'ready')
-    })));
+  const handleDriveLinkChange = (id: number, value: string) => {
+    setSlots(slots.map(slot => slot.id === id ? { ...slot, driveFolderLink: value } : slot));
   };
 
-  const handleSave = () => {
-    try {
-        localStorage.setItem('storage_slots', JSON.stringify(slots));
-        alert('Đã lưu cấu hình danh sách Kho lưu trữ thành công!');
-    } catch (e) {
-        alert('Không thể lưu vào trình duyệt. Vui lòng kiểm tra cài đặt quyền riêng tư.');
-    }
+  // Toggle Connection State (Multi-Active allowed)
+  const toggleConnection = (id: number) => {
+    setSlots(prev => prev.map(slot => {
+        if (slot.id === id) {
+            if (!slot.isInitialized && !slot.isConnected) {
+                alert("Vui lòng khởi tạo kết nối (Tự động tạo Sheet) trước khi bật!");
+                return slot;
+            }
+            return { ...slot, isConnected: !slot.isConnected };
+        }
+        return slot;
+    }));
   };
 
-  const getStatusColor = (slot: DriveSlot) => {
-     if (slot.isActive) return 'bg-green-50 border-green-200';
-     if (slot.status === 'full') return 'bg-red-50 border-red-200';
-     return 'bg-white border-gray-200';
+  const handleInitialize = async (id: number, driveLink?: string) => {
+      if (!driveLink) {
+          alert("Vui lòng dán Link Folder Google Drive trước!");
+          return;
+      }
+
+      setInitializingId(id);
+      try {
+          const result = await initializeSystemSlot(id, driveLink);
+          setSlots(prev => prev.map(slot => {
+              if (slot.id === id) {
+                  return {
+                      ...slot,
+                      ...result,
+                      isConnected: true, // Auto turn on
+                      status: 'ready'
+                  };
+              }
+              return slot;
+          }));
+      } catch (e: any) {
+          alert("Lỗi: " + (e.message || "Không thể kết nối"));
+      } finally {
+          setInitializingId(null);
+      }
+  };
+
+  // Helper to format bytes
+  const formatSize = (bytes: number) => {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   return (
@@ -60,105 +101,210 @@ const Settings: React.FC = () => {
         <div className="flex justify-between items-center mb-8">
             <div>
                 <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
-                    <Server size={28} className="text-blue-600"/> Cấu hình Lưu trữ Đám mây
+                    <Server size={28} className="text-blue-600"/> Quản trị Hệ thống Đa Kho
                 </h2>
-                <p className="text-gray-500 mt-1">Quản lý kết nối Google Drive và Google Sheets để tối ưu hóa dung lượng.</p>
+                <p className="text-gray-500 mt-1">Kết nối nhiều tài khoản Google Drive để mở rộng dung lượng lưu trữ.</p>
             </div>
-            <button 
-                onClick={handleSave}
-                className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-500/30 font-bold"
-            >
-                <Save size={20} /> Lưu Cấu Hình
-            </button>
+            <div className="flex gap-4">
+                 <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200 text-sm">
+                     <span className="font-bold text-gray-700 block">Tổng kho</span>
+                     <span className="text-blue-600 font-mono text-lg">{slots.length}</span>
+                 </div>
+                 <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200 text-sm">
+                     <span className="font-bold text-gray-700 block">Đang kết nối</span>
+                     <span className="text-green-600 font-mono text-lg">{slots.filter(s => s.isConnected).length}</span>
+                 </div>
+            </div>
         </div>
 
-        {/* Slots Configuration */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <RefreshCw size={20} /> Danh sách Kho lưu trữ (Tự động luân chuyển)
-            </h3>
-            <p className="text-sm text-gray-500 mb-6">
-                Hệ thống sẽ lưu dữ liệu vào <strong>Kho đang kích hoạt</strong>. Khi dung lượng đầy, hệ thống sẽ tự động chuyển sang Kho tiếp theo trong danh sách.
-            </p>
+        {/* Info Box - Updated for Safe Threshold */}
+        <div className="bg-blue-50 text-blue-900 p-4 rounded-xl border border-blue-100 mb-6 flex gap-4 shadow-sm items-start">
+             <div className="bg-blue-200 p-2 rounded-lg h-fit text-blue-700">
+                <Database size={24} />
+             </div>
+             <div>
+                <h4 className="font-bold text-sm mb-1 uppercase">Cơ chế Định tuyến & Cân bằng tải:</h4>
+                <p className="text-sm mb-1">
+                    Hệ thống sẽ <strong>tự động điều chuyển</strong> hồ sơ mới vào Kho có trạng thái "ĐANG KẾT NỐI" và dung lượng dưới ngưỡng an toàn (11GB).
+                </p>
+                <ul className="list-disc list-inside text-xs space-y-1 opacity-80">
+                    <li>Ngưỡng an toàn: <strong>11GB</strong>. Phần còn lại (4GB) dùng để dự phòng cập nhật dữ liệu cho các hồ sơ cũ.</li>
+                    <li>Khi một kho đầy (đạt 11GB), hệ thống sẽ tự tìm kho tiếp theo. Bạn có thể tự thêm kho mới bất kỳ lúc nào.</li>
+                </ul>
+             </div>
+        </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {slots.map((slot) => (
-                    <div key={slot.id} className={`p-4 rounded-xl border-2 transition-all ${getStatusColor(slot)} ${slot.isActive ? 'shadow-md ring-2 ring-green-500 ring-offset-2' : ''}`}>
-                        <div className="flex justify-between items-start mb-4">
+        {/* Slots Grid */}
+        <div className="grid grid-cols-1 gap-6">
+            {slots.map((slot) => {
+                const percentUsed = (slot.usedBytes / slot.totalCapacityBytes) * 100;
+                // Safe limit is ~73% (11/15)
+                const safePercent = (11 / 15) * 100; 
+                const isOverSafeLimit = slot.usedBytes >= (11 * 1024 * 1024 * 1024);
+                const isFull = percentUsed >= 95;
+                
+                return (
+                    <div key={slot.id} className={`relative flex flex-col md:flex-row gap-6 p-6 rounded-2xl border-2 transition-all ${
+                        slot.isConnected 
+                            ? 'border-green-500 bg-white shadow-lg ring-4 ring-green-50/50' 
+                            : 'border-gray-200 bg-gray-50 opacity-80 hover:opacity-100'
+                    }`}>
+                        {/* Status Badge Absolute */}
+                        <div className={`absolute -top-3 -right-3 px-3 py-1 rounded-full text-xs font-bold shadow-sm flex items-center gap-1 ${
+                             slot.isConnected ? 'bg-green-500 text-white' : 'bg-gray-400 text-white'
+                        }`}>
+                             <Power size={12} /> {slot.isConnected ? 'ĐANG KẾT NỐI' : 'NGẮT KẾT NỐI'}
+                        </div>
+
+                        {/* LEFT: ID & BASIC INFO */}
+                        <div className="w-full md:w-1/3 flex flex-col gap-4 border-b md:border-b-0 md:border-r border-gray-200 pb-4 md:pb-0 md:pr-6">
                             <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white ${slot.isActive ? 'bg-green-600' : 'bg-gray-400'}`}>
-                                    {slot.id}
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xl text-white shadow-md ${
+                                    slot.isConnected ? 'bg-gradient-to-br from-green-500 to-green-700' : 'bg-gray-400'
+                                }`}>
+                                    #{slot.id}
                                 </div>
-                                <div>
+                                <div className="flex-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Tên Kho / Tài khoản</label>
                                     <input 
                                         type="text" 
                                         value={slot.name}
-                                        onChange={(e) => handleSlotChange(slot.id, 'name', e.target.value)}
-                                        className="font-bold text-gray-800 bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none w-40"
+                                        onChange={(e) => handleSlotNameChange(slot.id, e.target.value)}
+                                        className="font-bold text-gray-800 bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 outline-none w-full text-lg"
                                     />
-                                    <div className="text-xs mt-1">
-                                        {slot.isActive ? (
-                                            <span className="text-green-600 font-bold flex items-center gap-1"><CheckCircle size={10}/> Đang sử dụng</span>
-                                        ) : (
-                                            <span className="text-gray-400 cursor-pointer hover:text-blue-600" onClick={() => handleSetActive(slot.id)}>Nhấn để kích hoạt</span>
-                                        )}
-                                    </div>
                                 </div>
                             </div>
                             
-                            <div className="text-right">
-                                <div className="text-xs text-gray-500 mb-1">Dung lượng (Mô phỏng)</div>
-                                <div className="w-24 h-3 bg-gray-200 rounded-full overflow-hidden">
-                                    <div 
-                                        className={`h-full ${slot.capacityUsed > 90 ? 'bg-red-500' : 'bg-blue-500'}`} 
-                                        style={{ width: `${slot.capacityUsed}%` }}
-                                    ></div>
-                                </div>
-                                <div className="text-[10px] text-right mt-1 font-mono">{slot.capacityUsed}% / 15GB</div>
+                            {/* Toggle Switch */}
+                            <div className="flex items-center justify-between bg-gray-100 p-3 rounded-lg mt-auto">
+                                <span className="text-sm font-semibold text-gray-600">Trạng thái hoạt động</span>
+                                <button 
+                                    onClick={() => toggleConnection(slot.id)}
+                                    className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ease-in-out ${
+                                        slot.isConnected ? 'bg-green-500' : 'bg-gray-300'
+                                    }`}
+                                >
+                                    <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${
+                                        slot.isConnected ? 'translate-x-6' : 'translate-x-0'
+                                    }`}></div>
+                                </button>
                             </div>
                         </div>
 
-                        <div className="space-y-3">
+                        {/* CENTER: STORAGE & CAPACITY */}
+                        <div className="w-full md:w-1/3 flex flex-col gap-4">
                             <div>
-                                <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase">Google Drive Folder ID</label>
-                                <div className="flex items-center gap-2">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/5968/5968523.png" className="w-4 h-4" alt="Drive"/>
+                                <label className="text-xs font-bold text-gray-500 uppercase block mb-2 flex justify-between">
+                                    <span>Dung lượng lưu trữ</span>
+                                    <span className={`${isFull ? 'text-red-600' : (isOverSafeLimit ? 'text-orange-500' : 'text-blue-600')}`}>
+                                        {percentUsed.toFixed(1)}%
+                                    </span>
+                                </label>
+                                <div className="h-4 w-full bg-gray-200 rounded-full overflow-hidden shadow-inner relative">
+                                    {/* Safe Limit Marker (11GB) */}
+                                    <div className="absolute top-0 bottom-0 w-0.5 bg-white z-10" style={{left: `${safePercent}%`}} title="Ngưỡng an toàn 11GB"></div>
+                                    
+                                    <div 
+                                        className={`h-full transition-all duration-1000 ${
+                                            isFull 
+                                                ? 'bg-red-500' 
+                                                : (isOverSafeLimit ? 'bg-gradient-to-r from-blue-500 to-orange-400' : 'bg-gradient-to-r from-blue-400 to-blue-600')
+                                        }`} 
+                                        style={{ width: `${percentUsed}%` }}
+                                    ></div>
+                                </div>
+                                <div className="flex justify-between text-[10px] text-gray-500 mt-1 font-mono">
+                                    <span>Đã dùng: {formatSize(slot.usedBytes)}</span>
+                                    <span>Tổng: {formatSize(slot.totalCapacityBytes)} (15GB)</span>
+                                </div>
+                                
+                                {/* Warning Text */}
+                                {isOverSafeLimit && !isFull && (
+                                    <div className="mt-2 text-xs text-orange-600 flex items-center gap-1 bg-orange-50 p-1.5 rounded border border-orange-100">
+                                        <AlertTriangle size={12} /> Kho đã qua mức an toàn (11GB). Chỉ dùng để cập nhật hồ sơ cũ.
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* System Info if Initialized */}
+                            {slot.isInitialized ? (
+                                <div className="bg-green-50 p-3 rounded-lg border border-green-100 text-xs space-y-2 mt-auto">
+                                    <div className="flex justify-between items-center">
+                                         <span className="font-semibold text-green-800 flex items-center gap-1">
+                                             <FileSpreadsheet size={12}/> Google Sheet
+                                         </span>
+                                         <span className="font-mono text-gray-600 bg-white px-1 rounded border">...{slot.sheetId.slice(-6)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                         <span className="font-semibold text-green-800 flex items-center gap-1">
+                                             <Folder size={12}/> Folder ID
+                                         </span>
+                                         <span className="font-mono text-gray-600 bg-white px-1 rounded border">...{slot.driveFolderId.slice(-6)}</span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100 text-xs text-yellow-700 italic mt-auto flex items-center gap-2">
+                                    <AlertCircle size={14}/> Chưa khởi tạo dữ liệu
+                                </div>
+                            )}
+                        </div>
+
+                        {/* RIGHT: CONFIG & ACTIONS */}
+                        <div className="w-full md:w-1/3 flex flex-col gap-3">
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">
+                                    Link Folder Google Drive (Chứa Ảnh)
+                                </label>
+                                <div className="flex gap-2">
                                     <input 
                                         type="text" 
-                                        value={slot.driveFolderId}
-                                        onChange={(e) => handleSlotChange(slot.id, 'driveFolderId', e.target.value)}
-                                        placeholder="VD: 1A2b3C..."
-                                        className="flex-1 text-sm border border-gray-300 rounded px-2 py-1.5 focus:border-blue-500 focus:outline-none"
+                                        value={slot.driveFolderLink || ''}
+                                        onChange={(e) => handleDriveLinkChange(slot.id, e.target.value)}
+                                        disabled={slot.isInitialized}
+                                        placeholder="https://drive.google.com/..."
+                                        className={`w-full border rounded px-3 py-2 text-xs outline-none focus:border-blue-500 ${slot.isInitialized ? 'bg-gray-100 text-gray-400' : 'bg-white'}`}
                                     />
+                                    {slot.isInitialized && (
+                                        <a href={slot.driveFolderLink} target="_blank" rel="noreferrer" className="bg-white border border-gray-300 px-2 rounded flex items-center justify-center hover:bg-gray-50 text-blue-600">
+                                            <ExternalLink size={14}/>
+                                        </a>
+                                    )}
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase">Google Sheet ID (Log Data)</label>
-                                <div className="flex items-center gap-2">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/5968/5968528.png" className="w-4 h-4" alt="Sheet"/>
-                                    <input 
-                                        type="text" 
-                                        value={slot.sheetId}
-                                        onChange={(e) => handleSlotChange(slot.id, 'sheetId', e.target.value)}
-                                        placeholder="VD: 1XyZ_abc..."
-                                        className="flex-1 text-sm border border-gray-300 rounded px-2 py-1.5 focus:border-blue-500 focus:outline-none"
-                                    />
-                                </div>
+
+                            <div className="mt-auto">
+                                {!slot.isInitialized ? (
+                                    <button 
+                                        onClick={() => handleInitialize(slot.id, slot.driveFolderLink)}
+                                        disabled={initializingId === slot.id || !slot.driveFolderLink}
+                                        className={`w-full py-3 rounded-lg text-xs font-bold shadow flex items-center justify-center gap-2 transition-all ${
+                                            !slot.driveFolderLink 
+                                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                                : 'bg-blue-600 text-white hover:bg-blue-700'
+                                        }`}
+                                    >
+                                        {initializingId === slot.id ? <Loader2 size={14} className="animate-spin"/> : <Link size={14}/>}
+                                        Tự động tạo Sheet & Kết nối
+                                    </button>
+                                ) : (
+                                    <button 
+                                        onClick={() => {
+                                            if(window.confirm("Cảnh báo: Hủy kết nối sẽ buộc bạn phải thiết lập lại từ đầu cho kho này. Dữ liệu cũ trên Drive không bị mất. Tiếp tục?")) {
+                                                setSlots(prev => prev.map(s => s.id === slot.id ? {...s, isInitialized: false, isConnected: false, sheetId: '', driveFolderId: '', usedBytes: 0} : s));
+                                            }
+                                        }}
+                                        className="w-full py-2 border border-red-200 text-red-500 rounded-lg text-xs font-bold hover:bg-red-50 transition-colors"
+                                    >
+                                        Reset / Hủy cấu hình
+                                    </button>
+                                )}
                             </div>
                         </div>
-                        
-                        {!slot.isActive && (
-                            <button 
-                                onClick={() => handleSetActive(slot.id)}
-                                className="mt-4 w-full py-1.5 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded border border-gray-200 transition-colors"
-                            >
-                                Chuyển sang dùng kho này
-                            </button>
-                        )}
                     </div>
-                ))}
-            </div>
+                );
+            })}
         </div>
+
       </div>
     </div>
   );

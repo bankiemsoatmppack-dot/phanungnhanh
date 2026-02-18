@@ -58,6 +58,8 @@ export interface DefectEntry {
   khoImages?: string[];
   solution: string;
   reporter?: string; // Who reported the issue
+  isSynced?: boolean; // Track if saved to Google Sheet
+  missingSolution?: boolean; // Track if solution needs update
 }
 
 export interface SpecLogEntry {
@@ -92,6 +94,7 @@ export interface ChatMessage {
   timestamp: string;
   isMe: boolean;
   role?: string; // 'Client', 'Quản lý', etc.
+  department?: string; // Added for Sheet Chat
 }
 
 export interface Document {
@@ -113,6 +116,9 @@ export interface Document {
   specLogs?: SpecLogEntry[]; // Log of spec checks
   approvalItems?: ApprovalItem[]; // Items saved from chat
   messages?: ChatMessage[]; // Chat history specific to this document
+  
+  // NEW: Routing field to know which Google Drive/Sheet this doc belongs to
+  storageSlotId?: number; 
 }
 
 export interface ChartDataPoint {
@@ -125,11 +131,19 @@ export interface ChartDataPoint {
 export interface DriveSlot {
   id: number;
   name: string;
-  driveFolderId: string;
-  sheetId: string;
-  capacityUsed: number; // Percentage 0-100
-  isActive: boolean;
-  status: 'active' | 'full' | 'error' | 'ready';
+  driveFolderLink?: string; // User manually inputs this
+  driveFolderId: string; // Extracted or same as link
+  sheetId: string; // System generated
+  
+  // Capacity Management
+  totalCapacityBytes: number; // e.g. 15GB = 16106127360
+  usedBytes: number; // Current usage
+  
+  isConnected: boolean; // Replaces 'isActive'. Multiple slots can be connected.
+  status: 'ready' | 'full' | 'error' | 'active';
+  isInitialized: boolean; // True if Folder and Sheet are created
+  lastSync?: string; // Timestamp
+  accountName?: string; // Account connected
 }
 
 export interface StorageConfig {
