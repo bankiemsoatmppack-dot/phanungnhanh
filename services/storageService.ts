@@ -6,6 +6,9 @@ import { MOCK_ANNOUNCEMENTS, MOCK_DOCUMENTS, MOCK_EMPLOYEES, DEFAULT_STORAGE_SLO
 const HARD_LIMIT_BYTES = 15 * 1024 * 1024 * 1024; // 15GB (Google Drive Limit)
 const SAFE_LIMIT_BYTES = 11 * 1024 * 1024 * 1024; // 11GB (Safe Threshold for new docs)
 
+// UPDATED: Versioned key to force all devices to reload the new DEFAULT_STORAGE_SLOTS
+const STORAGE_CONFIG_KEY = 'mppack_storage_config_v2'; 
+
 // --- PRESENCE SERVICE (Real-time Online Status) ---
 export const updatePresence = (userId: string) => {
     const presence = JSON.parse(localStorage.getItem('online_presence') || '{}');
@@ -143,13 +146,13 @@ export const getInternalGroupMessages = (): any[] => {
 
 // Helper: Get all slots (Use Default/Server config if local is empty)
 export const getSlots = (): DriveSlot[] => {
-    const saved = localStorage.getItem('storage_slots');
+    const saved = localStorage.getItem(STORAGE_CONFIG_KEY);
     if (saved) {
         return JSON.parse(saved);
     }
     // FALLBACK TO SERVER/DEFAULT CONFIG IF NO LOCAL DATA
     // This solves the issue of "New Device = Empty Config"
-    localStorage.setItem('storage_slots', JSON.stringify(DEFAULT_STORAGE_SLOTS));
+    localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(DEFAULT_STORAGE_SLOTS));
     return DEFAULT_STORAGE_SLOTS;
 };
 
@@ -162,7 +165,7 @@ export const getPrimaryActiveSlot = (): DriveSlot | undefined => {
 
 // Helper: Save slots back
 export const saveSlots = (slots: DriveSlot[]) => {
-    localStorage.setItem('storage_slots', JSON.stringify(slots));
+    localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(slots));
 };
 
 // Helper: Increment Usage (Simulation)

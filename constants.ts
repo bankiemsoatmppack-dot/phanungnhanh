@@ -7,13 +7,13 @@ const PERM_READ_ONLY = { view: true, add: false, edit: false, delete: false };
 const PERM_WORKER = { view: true, add: true, edit: false, delete: false }; // Workers can add (chat/report) but not edit system data
 
 // --- SYSTEM MASTER CONFIGURATION (Simulating Server Data) ---
-// This ensures all devices see the same configuration immediately
+// This ensures all devices see the same configuration immediately without manual setup
 export const DEFAULT_STORAGE_SLOTS: DriveSlot[] = [
     {
         id: 1,
         name: 'KHO TỔNG (MPPACK-MAIN)',
-        driveFolderLink: 'https://drive.google.com/drive/folders/mppack-master-folder',
-        driveFolderId: 'mppack-master-folder',
+        driveFolderLink: 'https://drive.google.com/drive/folders/1A2B3C4D5E6F7G8H9I0J', // Hardcoded "Server" Link
+        driveFolderId: '1A2B3C4D5E6F7G8H9I0J',
         sheetId: 'sheet_master_production_v1',
         totalCapacityBytes: 15 * 1024 * 1024 * 1024, // 15GB
         usedBytes: 8.5 * 1024 * 1024 * 1024, // ~8.5GB Used (Simulated)
@@ -26,11 +26,11 @@ export const DEFAULT_STORAGE_SLOTS: DriveSlot[] = [
     {
         id: 2,
         name: 'KHO DỰ PHÒNG 01',
-        driveFolderLink: 'https://drive.google.com/drive/folders/backup-01',
-        driveFolderId: 'backup-01',
+        driveFolderLink: 'https://drive.google.com/drive/folders/backup-01-folder-id',
+        driveFolderId: 'backup-01-folder-id',
         sheetId: 'sheet_backup_v1',
         totalCapacityBytes: 15 * 1024 * 1024 * 1024,
-        usedBytes: 0,
+        usedBytes: 2.1 * 1024 * 1024 * 1024,
         isConnected: true,
         status: 'ready',
         isInitialized: true,
@@ -39,19 +39,7 @@ export const DEFAULT_STORAGE_SLOTS: DriveSlot[] = [
     },
     {
         id: 3,
-        name: 'Kho Dữ Liệu 3',
-        driveFolderLink: '',
-        driveFolderId: '',
-        sheetId: '',
-        totalCapacityBytes: 15 * 1024 * 1024 * 1024,
-        usedBytes: 0,
-        isConnected: false,
-        status: 'ready',
-        isInitialized: false
-    },
-    {
-        id: 4,
-        name: 'Kho Dữ Liệu 4',
+        name: 'Kho Dữ Liệu 3 (Mới)',
         driveFolderLink: '',
         driveFolderId: '',
         sheetId: '',
