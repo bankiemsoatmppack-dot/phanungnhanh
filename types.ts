@@ -6,11 +6,18 @@ export type UserRole = 'ADMIN' | 'USER';
 export type UserPosition = 
   | 'DIRECTOR'         // Giám đốc (Read Only Admin)
   | 'IT_ADMIN'         // IT (Read Only Admin)
-  | 'DEPUTY_DIRECTOR'  // Phó Giám Đốc (Full Admin)
+  | 'DEPUTY_DIRECTOR'  // Phó Giám Đốc (Full Admin + Permission Manager)
   | 'QA_MANAGER'       // TP KCS (Full Admin)
   | 'PROD_MANAGER'     // TP SX (Full Admin)
   | 'WORKER'           // Công nhân (User)
   | 'SALES';           // Kinh doanh (User)
+
+export interface UserPermissions {
+    view: boolean;
+    add: boolean;
+    edit: boolean;
+    delete: boolean;
+}
 
 export interface User {
   id: string;
@@ -18,6 +25,7 @@ export interface User {
   username: string;
   role: UserRole; // Determines UI Layout (Desktop vs Mobile)
   position?: UserPosition; // Determines Actions (Edit/Delete)
+  permissions: UserPermissions; // NEW: Fine-grained permissions
   avatar?: string;
   department?: string;
 }
@@ -29,7 +37,8 @@ export interface Employee {
   username: string;
   password?: string; 
   department: string;
-  position: UserPosition; // Added Position
+  position: UserPosition; 
+  permissions: UserPermissions; // NEW: Fine-grained permissions
   status: 'active' | 'inactive';
   createdAt: string;
 }
@@ -42,6 +51,22 @@ export interface LoginLogEntry {
     position: string;
     timestamp: string; // DD/MM/YYYY HH:mm:ss
     ip?: string; // Simulated IP
+}
+
+// NEW: Advanced Audit Log
+export type LogCategory = 'DOCUMENT' | 'EMPLOYEE' | 'SYSTEM' | 'ANNOUNCEMENT';
+export type LogAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'VIEW' | 'LOGIN' | 'APPROVE';
+
+export interface SystemLogEntry {
+    id: string;
+    timestamp: string; // DD/MM/YYYY HH:mm:ss
+    actorId: string;
+    actorName: string;
+    action: LogAction;
+    category: LogCategory;
+    targetId?: string; // ID of the document/employee affected
+    targetName?: string; // Name of the document/employee
+    description: string; // Detailed description of change
 }
 
 export interface ReadLogEntry {

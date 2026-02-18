@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { User, UserRole, UserPosition } from 'lucide-react';
+import { User, UserRole, UserPosition, UserPermissions } from 'lucide-react';
 import { User as AppUser } from '../types';
 import { MOCK_EMPLOYEES } from '../constants';
 import { saveLoginLog } from '../services/storageService';
@@ -8,6 +8,11 @@ import { saveLoginLog } from '../services/storageService';
 interface Props {
   onLogin: (user: AppUser) => void;
 }
+
+// Default permissions for hardcoded users
+const PERM_FULL = { view: true, add: true, edit: true, delete: true };
+const PERM_READ_ONLY = { view: true, add: false, edit: false, delete: false };
+const PERM_WORKER = { view: true, add: true, edit: false, delete: false };
 
 const Login: React.FC<Props> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
@@ -24,27 +29,27 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
     // 1. Check Hardcoded Roles first (for Demo)
     if (u === 'thai' && password === 'admin') {
-      handleSuccessLogin({ id: '0', name: 'Thái Admin', username: 'thai', role: 'ADMIN', department: 'IT', position: 'IT_ADMIN' });
+      handleSuccessLogin({ id: '0', name: 'Thái Admin', username: 'thai', role: 'ADMIN', department: 'IT', position: 'IT_ADMIN', permissions: PERM_READ_ONLY });
       return;
     }
     if (u === 'giamdoc') {
-      handleSuccessLogin({ id: '10', name: 'Ông Giám Đốc', username: 'giamdoc', role: 'ADMIN', department: 'BAN GIÁM ĐỐC', position: 'DIRECTOR' });
+      handleSuccessLogin({ id: '10', name: 'Ông Giám Đốc', username: 'giamdoc', role: 'ADMIN', department: 'BAN GIÁM ĐỐC', position: 'DIRECTOR', permissions: PERM_READ_ONLY });
       return;
     }
     if (u === 'phogiamdoc') {
-      handleSuccessLogin({ id: '11', name: 'Ông Phó GĐ', username: 'phogiamdoc', role: 'ADMIN', department: 'BAN GIÁM ĐỐC', position: 'DEPUTY_DIRECTOR' });
+      handleSuccessLogin({ id: '11', name: 'Ông Phó GĐ', username: 'phogiamdoc', role: 'ADMIN', department: 'BAN GIÁM ĐỐC', position: 'DEPUTY_DIRECTOR', permissions: PERM_FULL });
       return;
     }
     if (u === 'tpkcs') {
-      handleSuccessLogin({ id: '12', name: 'Trưởng Phòng KCS', username: 'tpkcs', role: 'ADMIN', department: 'KCS', position: 'QA_MANAGER' });
+      handleSuccessLogin({ id: '12', name: 'Trưởng Phòng KCS', username: 'tpkcs', role: 'ADMIN', department: 'KCS', position: 'QA_MANAGER', permissions: PERM_FULL });
       return;
     }
     if (u === 'tpsx') {
-      handleSuccessLogin({ id: '13', name: 'Trưởng Phòng SX', username: 'tpsx', role: 'ADMIN', department: 'SX', position: 'PROD_MANAGER' });
+      handleSuccessLogin({ id: '13', name: 'Trưởng Phòng SX', username: 'tpsx', role: 'ADMIN', department: 'SX', position: 'PROD_MANAGER', permissions: PERM_FULL });
       return;
     }
     if (u === 'it') {
-      handleSuccessLogin({ id: '14', name: 'IT Admin', username: 'it', role: 'ADMIN', department: 'IT', position: 'IT_ADMIN' });
+      handleSuccessLogin({ id: '14', name: 'IT Admin', username: 'it', role: 'ADMIN', department: 'IT', position: 'IT_ADMIN', permissions: PERM_READ_ONLY });
       return;
     }
 
@@ -59,7 +64,8 @@ const Login: React.FC<Props> = ({ onLogin }) => {
             username: foundEmp.username, 
             role: 'USER',
             department: foundEmp.department,
-            position: foundEmp.position as UserPosition
+            position: foundEmp.position as UserPosition,
+            permissions: foundEmp.permissions || PERM_WORKER
         });
     } else {
         // Default fallback for demo if username not found
@@ -69,7 +75,8 @@ const Login: React.FC<Props> = ({ onLogin }) => {
             username: username || 'NV001', 
             role: 'USER',
             department: 'IN', // Default department
-            position: 'WORKER'
+            position: 'WORKER',
+            permissions: PERM_WORKER
         });
     }
   };

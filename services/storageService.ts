@@ -1,5 +1,5 @@
 
-import { DriveSlot, ChatMessage, DefectEntry, Document, Announcement, LoginLogEntry, User } from '../types';
+import { DriveSlot, ChatMessage, DefectEntry, Document, Announcement, LoginLogEntry, User, SystemLogEntry, LogCategory, LogAction } from '../types';
 import { MOCK_ANNOUNCEMENTS } from '../constants';
 
 // Constants
@@ -58,11 +58,74 @@ export const saveLoginLog = (user: User) => {
     // Keep last 200 logs
     const updatedLogs = [newLog, ...logs].slice(0, 200);
     localStorage.setItem('login_logs', JSON.stringify(updatedLogs));
+    
+    // Also save to System Audit Log
+    logAction(user, 'LOGIN', 'SYSTEM', 'System', 'Đăng nhập vào hệ thống');
 };
 
 export const getLoginLogs = (): LoginLogEntry[] => {
     return JSON.parse(localStorage.getItem('login_logs') || '[]');
 };
+
+// --- ADVANCED AUDIT LOGGING (Separated Sheets) ---
+// This simulates saving to different Google Sheets based on category
+export const logAction = (
+    actor: User | {id: string, name: string}, 
+    action: LogAction, 
+    category: LogCategory, 
+    targetName: string, 
+    description: string
+) => {
+    const entry: SystemLogEntry = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+        timestamp: new Date().toLocaleString('en-GB'),
+        actorId: actor.id,
+        actorName: actor.name,
+        action,
+        category,
+        targetName,
+        description
+    };
+
+    // Determine Storage Key (Simulating different Sheets)
+    let storageKey = 'logs_system_general';
+    if (category === 'DOCUMENT') storageKey = 'logs_sheet_documents';
+    else if (category === 'EMPLOYEE') storageKey = 'logs_sheet_employees';
+    else if (category === 'ANNOUNCEMENT') storageKey = 'logs_sheet_announcements';
+
+    const currentLogs: SystemLogEntry[] = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    const updatedLogs = [entry, ...currentLogs].slice(0, 500); // Limit to 500 records per sheet for demo
+    localStorage.setItem(storageKey, JSON.stringify(updatedLogs));
+    
+    console.log(`[Audit] Saved to ${storageKey}:`, description);
+};
+
+export const getActionLogs = (category: LogCategory | 'ALL'): SystemLogEntry[] => {
+    let logs: SystemLogEntry[] = [];
+    
+    if (category === 'ALL' || category === 'DOCUMENT') {
+        logs = [...logs, ...JSON.parse(localStorage.getItem('logs_sheet_documents') || '[]')];
+    }
+    if (category === 'ALL' || category === 'EMPLOYEE') {
+        logs = [...logs, ...JSON.parse(localStorage.getItem('logs_sheet_employees') || '[]')];
+    }
+    if (category === 'ALL' || category === 'SYSTEM' || category === 'ANNOUNCEMENT') {
+        logs = [...logs, ...JSON.parse(localStorage.getItem('logs_system_general') || '[]')];
+        logs = [...logs, ...JSON.parse(localStorage.getItem('logs_sheet_announcements') || '[]')];
+    }
+
+    // Sort by timestamp descending (requires parsing string date, simplified here assuming ISO or consistent format)
+    // For "DD/MM/YYYY HH:mm:ss" generic sort might fail, so we parse manually
+    return logs.sort((a, b) => {
+        const parseDate = (str: string) => {
+            const [time, date] = str.split(' ');
+            const [d, m, y] = date.split('/');
+            return new Date(`${y}-${m}-${d}T${time}`);
+        };
+        return parseDate(b.timestamp).getTime() - parseDate(a.timestamp).getTime();
+    });
+};
+
 
 // --- INTERNAL GROUP CHAT SERVICE ---
 export const sendInternalGroupMessage = (msg: any) => {
