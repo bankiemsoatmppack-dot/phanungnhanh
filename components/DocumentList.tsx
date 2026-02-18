@@ -1,16 +1,23 @@
+
 import React, { useState } from 'react';
 import { Document } from '../types';
-import { Search, Filter, Plus, Folder, ChevronDown, ChevronRight, Layers, FileBox } from 'lucide-react';
+import { Search, Filter, Plus, Folder, ChevronDown, ChevronRight, Layers, FileBox, Edit2, Trash2, X, Check } from 'lucide-react';
 
 interface Props {
   documents: Document[];
   selectedProductKey?: string; // Identifier for Sender+Title
   onSelectProduct: (sender: string, title: string) => void;
   onOpenAddModal: () => void;
+  onDeleteGroup?: (sender: string, title: string) => void;
+  onEditGroup?: (oldSender: string, oldTitle: string, newSender: string, newTitle: string) => void;
 }
 
-const DocumentList: React.FC<Props> = ({ documents, selectedProductKey, onSelectProduct, onOpenAddModal }) => {
+const DocumentList: React.FC<Props> = ({ documents, selectedProductKey, onSelectProduct, onOpenAddModal, onDeleteGroup, onEditGroup }) => {
   const [expandedCustomers, setExpandedCustomers] = useState<Record<string, boolean>>({});
+  
+  // Edit State
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ sender: '', title: '' });
 
   const toggleCustomer = (customer: string) => {
     setExpandedCustomers(prev => ({ ...prev, [customer]: !prev[customer] }));
@@ -37,6 +44,32 @@ const DocumentList: React.FC<Props> = ({ documents, selectedProductKey, onSelect
       }, 0);
   };
 
+  const handleStartEdit = (e: React.MouseEvent, sender: string, title: string) => {
+      e.stopPropagation();
+      setEditingKey(`${sender}|${title}`);
+      setEditForm({ sender, title });
+  };
+
+  const handleCancelEdit = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setEditingKey(null);
+  };
+
+  const handleSaveEdit = (e: React.MouseEvent, oldSender: string, oldTitle: string) => {
+      e.stopPropagation();
+      if (onEditGroup) {
+          onEditGroup(oldSender, oldTitle, editForm.sender, editForm.title);
+      }
+      setEditingKey(null);
+  };
+
+  const handleDelete = (e: React.MouseEvent, sender: string, title: string) => {
+      e.stopPropagation();
+      if (window.confirm(`⚠️ CẢNH BÁO XÓA DỮ LIỆU\n\nBạn có chắc chắn muốn xóa hồ sơ sản phẩm:\n"${title}" - Khách hàng: ${sender}?\n\nHành động này sẽ xóa vĩnh viễn tất cả các Phiếu SX liên quan khỏi Kho Dữ Liệu.`)) {
+          if (onDeleteGroup) onDeleteGroup(sender, title);
+      }
+  };
+
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200 w-full">
       {/* Header Search & Tools */}
@@ -61,7 +94,7 @@ const DocumentList: React.FC<Props> = ({ documents, selectedProductKey, onSelect
              <Plus size={16} />
           </button>
         </div>
-        <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Cột 2: Sản Phẩm</div>
+        <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Cột 2: Sản Phẩm (Sửa/Xóa tại đây)</div>
       </div>
 
       {/* Nested List */}
@@ -75,11 +108,12 @@ const DocumentList: React.FC<Props> = ({ documents, selectedProductKey, onSelect
                     {/* Level 1: Customer */}
                     <div 
                         onClick={() => toggleCustomer(customer)}
-                        className="px-2 py-2 bg-gray-100 rounded-lg text-xs font-bold text-gray-700 flex items-center gap-2 uppercase cursor-pointer hover:bg-gray-200 select-none border border-gray-200"
+                        className="px-2 py-2 bg-gray-100 rounded-lg text-xs font-bold text-gray-700 flex items-center gap-2 uppercase cursor-pointer hover:bg-gray-200 select-none border border-gray-200 group"
                     >
                         {isCustomerOpen ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
                         <Folder size={14} className="text-blue-500"/>
-                        {customer}
+                        <span className="flex-1 truncate">{customer}</span>
+                        <span className="text-[9px] bg-gray-200 px-1.5 rounded text-gray-500 font-normal">{products.length} SP</span>
                     </div>
 
                     {isCustomerOpen && (
@@ -88,20 +122,65 @@ const DocumentList: React.FC<Props> = ({ documents, selectedProductKey, onSelect
                                 const currentKey = `${customer}|${productName}`;
                                 const isSelected = selectedProductKey === currentKey;
                                 const pendingCount = getPendingCountForProduct(customer, productName);
+                                const isEditing = editingKey === currentKey;
 
                                 return (
                                     <div 
                                         key={productName}
-                                        onClick={() => onSelectProduct(customer, productName)}
-                                        className={`flex items-start gap-2 p-2 rounded cursor-pointer transition-colors text-sm border ${isSelected ? 'bg-blue-50 border-blue-200 text-blue-800 font-medium' : 'hover:bg-gray-50 border-transparent text-gray-600'}`}
+                                        onClick={() => !isEditing && onSelectProduct(customer, productName)}
+                                        className={`flex items-start gap-2 p-2 rounded cursor-pointer transition-colors text-sm border group relative ${isSelected ? 'bg-blue-50 border-blue-200 text-blue-800 font-medium' : 'hover:bg-gray-50 border-transparent text-gray-600'}`}
                                     >
-                                        <FileBox size={14} className={`mt-0.5 ${isSelected ? 'text-blue-500' : 'text-gray-400'}`} />
-                                        <div className="flex-1 leading-tight text-xs flex justify-between items-center gap-2">
-                                            <span>{productName}</span>
-                                            {pendingCount > 0 && (
-                                                <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shadow-sm">
-                                                    {pendingCount}
-                                                </span>
+                                        <FileBox size={14} className={`mt-0.5 shrink-0 ${isSelected ? 'text-blue-500' : 'text-gray-400'}`} />
+                                        
+                                        <div className="flex-1 min-w-0">
+                                            {isEditing ? (
+                                                <div className="flex flex-col gap-2 p-1 bg-white border border-blue-300 rounded shadow-sm z-10">
+                                                    <input 
+                                                        value={editForm.sender} 
+                                                        onChange={e => setEditForm({...editForm, sender: e.target.value})}
+                                                        className="text-xs border rounded px-1 py-0.5 outline-none focus:border-blue-500"
+                                                        placeholder="Tên Khách Hàng"
+                                                    />
+                                                    <input 
+                                                        value={editForm.title} 
+                                                        onChange={e => setEditForm({...editForm, title: e.target.value})}
+                                                        className="text-xs border rounded px-1 py-0.5 outline-none focus:border-blue-500 font-bold"
+                                                        placeholder="Tên Sản Phẩm"
+                                                    />
+                                                    <div className="flex justify-end gap-1">
+                                                        <button onClick={handleCancelEdit} className="p-1 text-red-500 hover:bg-red-50 rounded"><X size={12}/></button>
+                                                        <button onClick={(e) => handleSaveEdit(e, customer, productName)} className="p-1 text-green-500 hover:bg-green-50 rounded"><Check size={12}/></button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex justify-between items-start gap-2">
+                                                    <span className="leading-tight text-xs break-words">{productName}</span>
+                                                    
+                                                    <div className="flex items-center gap-1 shrink-0">
+                                                        {pendingCount > 0 && (
+                                                            <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shadow-sm">
+                                                                {pendingCount}
+                                                            </span>
+                                                        )}
+                                                        {/* Action Buttons (Hover Only) */}
+                                                        <div className="hidden group-hover:flex bg-white/80 rounded backdrop-blur-sm shadow-sm border border-gray-100">
+                                                            <button 
+                                                                onClick={(e) => handleStartEdit(e, customer, productName)}
+                                                                className="p-1 hover:bg-blue-50 text-blue-600 rounded transition-colors" 
+                                                                title="Sửa tên SP/KH"
+                                                            >
+                                                                <Edit2 size={12}/>
+                                                            </button>
+                                                            <button 
+                                                                onClick={(e) => handleDelete(e, customer, productName)}
+                                                                className="p-1 hover:bg-red-50 text-red-500 rounded transition-colors" 
+                                                                title="Xóa hồ sơ này"
+                                                            >
+                                                                <Trash2 size={12}/>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             )}
                                         </div>
                                     </div>

@@ -15,12 +15,12 @@ import FloatingChat from './components/FloatingChat'; // Import Floating Chat
 import { MOCK_DOCUMENTS } from './constants';
 import { Document, User, DefectEntry, Announcement } from './types';
 import { Plus, AlertTriangle, Settings as SettingsIcon, ClipboardList, ArrowRight, Loader2, Database } from 'lucide-react';
-import { updatePresence, setOffline, fetchAnnouncementsFromSheet, saveAnnouncementToSheet, updateAnnouncementReadStatusInSheet, deleteAnnouncementFromSheet } from './services/storageService';
+import { updatePresence, setOffline, fetchAnnouncementsFromSheet, saveAnnouncementToSheet, updateAnnouncementReadStatusInSheet, deleteAnnouncementFromSheet, fetchDocumentsFromSheet, saveDocumentToSheet, deleteDocumentFromSheet, logAction } from './services/storageService';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<string>('DASHBOARD');
-  const [documents, setDocuments] = useState<Document[]>(MOCK_DOCUMENTS);
+  const [documents, setDocuments] = useState<Document[]>([]); // Init empty, load from storage
   
   // Announcements State - Initialize Empty
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -28,7 +28,7 @@ const App: React.FC = () => {
   const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(false);
 
   // Selection State
-  const [selectedDocId, setSelectedDocId] = useState<string>(MOCK_DOCUMENTS[0].id);
+  const [selectedDocId, setSelectedDocId] = useState<string>('');
   const [selectedProductKey, setSelectedProductKey] = useState<string>(''); // Format: "Sender|Title"
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -37,13 +37,26 @@ const App: React.FC = () => {
   // State for missing solution notifications
   const [missingSolutions, setMissingSolutions] = useState<{docId: string, docTitle: string, defectId: string, defectContent: string}[]>([]);
 
-  // Init selection based on first doc
-  useEffect(() => {
-      if (documents.length > 0 && !selectedProductKey) {
-          const first = documents[0];
-          setSelectedProductKey(`${first.sender}|${first.title}`);
-          setSelectedDocId(first.id);
+  // --- LOAD DOCUMENTS FROM STORAGE ---
+  const loadDocuments = async () => {
+      try {
+          const docs = await fetchDocumentsFromSheet();
+          setDocuments(docs);
+          
+          // Set initial selection if needed
+          if (docs.length > 0 && !selectedDocId) {
+              const first = docs[0];
+              setSelectedProductKey(`${first.sender}|${first.title}`);
+              setSelectedDocId(first.id);
+          }
+      } catch (error) {
+          console.error("Failed to load documents", error);
+          setDocuments(MOCK_DOCUMENTS); // Fallback
       }
+  };
+
+  useEffect(() => {
+      loadDocuments();
   }, []);
 
   // --- HEARTBEAT & LOGOUT HANDLER ---
@@ -165,7 +178,7 @@ const App: React.FC = () => {
   }, [documents]);
 
   // Derived state for selected document to ensure we always have the latest version
-  const selectedDoc = documents.find(d => d.id === selectedDocId) || documents[0];
+  const selectedDoc = documents.find(d => d.id === selectedDocId) || documents[0] || null;
   
   // Derived state for PO List (Filtered by selected Product)
   const filteredPOs = documents.filter(d => {
@@ -179,24 +192,21 @@ const App: React.FC = () => {
       ? announcements.filter(a => !a.readLog.some(log => log.userId === user.id)).length 
       : 0;
 
-  const handleUpdateDocument = (updatedDoc: Document) => {
+  const handleUpdateDocument = async (updatedDoc: Document) => {
     setDocuments(prevDocs => 
         prevDocs.map(d => d.id === updatedDoc.id ? updatedDoc : d)
     );
+    await saveDocumentToSheet(updatedDoc);
   };
 
-  const handleAddDocument = (newDoc: Document) => {
+  const handleAddDocument = async (newDoc: Document) => {
       setDocuments(prev => [newDoc, ...prev]);
       if (user?.role === 'ADMIN') {
         setSelectedProductKey(`${newDoc.sender}|${newDoc.title}`);
         setSelectedDocId(newDoc.id);
       }
-  };
-
-  const handleSelectDocumentFromNotification = (doc: Document) => {
-      setSelectedProductKey(`${doc.sender}|${doc.title}`);
-      setSelectedDocId(doc.id);
-      setCurrentView('DOCUMENTS');
+      await saveDocumentToSheet(newDoc);
+      if(user) logAction(user, 'CREATE', 'DOCUMENT', newDoc.title, `Tạo hồ sơ mới PO: ${newDoc.productionOrder}`);
   };
 
   const handleFixSolution = (docId: string) => {
@@ -219,6 +229,53 @@ const App: React.FC = () => {
            });
            setSelectedDocId(relatedDocs[0].id);
       }
+  };
+
+  // --- DELETE & EDIT GROUP LOGIC (COL 2) ---
+  const handleDeleteGroup = async (sender: string, title: string) => {
+      // Find all POs matching this group
+      const relatedDocs = documents.filter(d => d.sender === sender && d.title === title);
+      if (relatedDocs.length === 0) return;
+
+      // Optimistic UI Update
+      setDocuments(prev => prev.filter(d => !(d.sender === sender && d.title === title)));
+      
+      // Update Storage
+      for (const doc of relatedDocs) {
+          await deleteDocumentFromSheet(doc.id);
+      }
+      
+      // Clear selection if current selection was deleted
+      if (selectedProductKey === `${sender}|${title}`) {
+          setSelectedProductKey('');
+          setSelectedDocId('');
+      }
+
+      if(user) logAction(user, 'DELETE', 'DOCUMENT', title, `Xóa toàn bộ hồ sơ khách hàng ${sender}, sản phẩm ${title} (${relatedDocs.length} POs)`);
+  };
+
+  const handleEditGroup = async (oldSender: string, oldTitle: string, newSender: string, newTitle: string) => {
+      const relatedDocs = documents.filter(d => d.sender === oldSender && d.title === oldTitle);
+      
+      const updatedDocs = documents.map(d => {
+          if (d.sender === oldSender && d.title === oldTitle) {
+              return { ...d, sender: newSender, title: newTitle };
+          }
+          return d;
+      });
+      
+      setDocuments(updatedDocs);
+      
+      // Update Storage
+      for (const doc of relatedDocs) {
+          await saveDocumentToSheet({ ...doc, sender: newSender, title: newTitle });
+      }
+
+      // Update Selection Key
+      if (selectedProductKey === `${oldSender}|${oldTitle}`) {
+          setSelectedProductKey(`${newSender}|${newTitle}`);
+      }
+      if(user) logAction(user, 'UPDATE', 'DOCUMENT', newTitle, `Đổi tên SP từ ${oldTitle} -> ${newTitle}`);
   };
 
   // --- ANNOUNCEMENT HANDLERS (PERSISTENT) ---
@@ -377,6 +434,8 @@ const App: React.FC = () => {
                         selectedProductKey={selectedProductKey}
                         onSelectProduct={handleProductSelect}
                         onOpenAddModal={() => setIsAddModalOpen(true)}
+                        onDeleteGroup={handleDeleteGroup}
+                        onEditGroup={handleEditGroup}
                     />
                 </div>
 
@@ -399,10 +458,12 @@ const App: React.FC = () => {
                              <p>Chọn sản phẩm để xem hồ sơ</p>
                          </div>
                      ) : (
-                        <DocumentDetail 
-                            document={selectedDoc} 
-                            onUpdateDocument={handleUpdateDocument}
-                        />
+                        selectedDoc && (
+                            <DocumentDetail 
+                                document={selectedDoc} 
+                                onUpdateDocument={handleUpdateDocument}
+                            />
+                        )
                      )}
                 </div>
             </div>

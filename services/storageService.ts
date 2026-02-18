@@ -1,6 +1,6 @@
 
 import { DriveSlot, ChatMessage, DefectEntry, Document, Announcement, LoginLogEntry, User, SystemLogEntry, LogCategory, LogAction } from '../types';
-import { MOCK_ANNOUNCEMENTS } from '../constants';
+import { MOCK_ANNOUNCEMENTS, MOCK_DOCUMENTS } from '../constants';
 
 // Constants
 const HARD_LIMIT_BYTES = 15 * 1024 * 1024 * 1024; // 15GB (Google Drive Limit)
@@ -457,5 +457,53 @@ export const updateAnnouncementReadStatusInSheet = async (announcementId: string
     });
 
     localStorage.setItem(key, JSON.stringify(updatedData));
+    return true;
+};
+
+// --- CORE DOCUMENT STORAGE (SIMULATION) ---
+// Initialize Storage with Mock data if empty
+export const initializeDocumentStorage = () => {
+    const key = 'sheet_documents_master';
+    if (!localStorage.getItem(key)) {
+        localStorage.setItem(key, JSON.stringify(MOCK_DOCUMENTS));
+        console.log('[Storage] Initialized Master Document Sheet with Mock Data');
+    }
+};
+
+export const fetchDocumentsFromSheet = async (): Promise<Document[]> => {
+    initializeDocumentStorage();
+    const key = 'sheet_documents_master';
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 300));
+    return JSON.parse(localStorage.getItem(key) || '[]');
+};
+
+export const saveDocumentToSheet = async (doc: Document): Promise<boolean> => {
+    initializeDocumentStorage();
+    const key = 'sheet_documents_master';
+    const docs: Document[] = JSON.parse(localStorage.getItem(key) || '[]');
+    
+    const index = docs.findIndex(d => d.id === doc.id);
+    let updatedDocs;
+    if (index >= 0) {
+        updatedDocs = docs.map(d => d.id === doc.id ? doc : d);
+    } else {
+        updatedDocs = [doc, ...docs];
+    }
+    
+    localStorage.setItem(key, JSON.stringify(updatedDocs));
+    // Simulate slot usage update (metadata)
+    const slotId = doc.storageSlotId || assignSlotForNewDocument();
+    if (slotId) incrementUsage(slotId, 2 * 1024); // 2KB metadata
+    
+    return true;
+};
+
+export const deleteDocumentFromSheet = async (docId: string): Promise<boolean> => {
+    initializeDocumentStorage();
+    const key = 'sheet_documents_master';
+    const docs: Document[] = JSON.parse(localStorage.getItem(key) || '[]');
+    const updatedDocs = docs.filter(d => d.id !== docId);
+    localStorage.setItem(key, JSON.stringify(updatedDocs));
     return true;
 };
