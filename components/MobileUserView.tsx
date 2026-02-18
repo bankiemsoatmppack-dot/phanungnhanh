@@ -26,6 +26,9 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
   const [viewImage, setViewImage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // NEW: Date Filter State
+  const [dateFilter, setDateFilter] = useState<'TODAY' | 'YESTERDAY' | 'ALL'>('ALL');
+  
   // PO Management State
   const [showPOSwitcher, setShowPOSwitcher] = useState(false);
   const [isNewPOModalOpen, setIsNewPOModalOpen] = useState(false);
@@ -76,24 +79,59 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
       }
   }, [messages, selectedDocId]);
 
-  // Map Documents to MobileTasks interface for display
-  const tasks: MobileTask[] = documents.map(doc => ({
-      id: doc.id,
-      title: doc.title,
-      sender: doc.sender,
-      sku: doc.code,
-      code: doc.productionOrder || doc.code,
-      date: doc.date,
-      status: doc.status === 'approved' ? 'completed' : 'pending',
-      notificationCount: (doc.approvalItems || []).filter(i => i.status === 'pending').length,
-      isMyTask: true, // For demo, assume all are visible/assigned
-      type: 'folder'
-  }));
+  // --- LOGIC: GROUP DOCUMENTS & SHOW LATEST PO ---
+  // 1. Group documents by "Sender|Title"
+  const groupedDocs = documents.reduce((acc, doc) => {
+      const key = `${doc.sender}|${doc.title}`;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(doc);
+      return acc;
+  }, {} as Record<string, Document[]>);
+
+  // 2. Convert groups to MobileTasks (Taking the latest one)
+  const tasks: MobileTask[] = Object.values(groupedDocs).map((group: Document[]) => {
+      // Sort by Date Descending (Newest first)
+      group.sort((a, b) => {
+          const [d1, m1, y1] = a.date.split('/');
+          const [d2, m2, y2] = b.date.split('/');
+          const dateA = new Date(+y1, +m1 - 1, +d1);
+          const dateB = new Date(+y2, +m2 - 1, +d2);
+          // If dates are equal, sort by ID (assuming higher ID is newer)
+          if (dateA.getTime() === dateB.getTime()) {
+              return b.id.localeCompare(a.id);
+          }
+          return dateB.getTime() - dateA.getTime();
+      });
+      
+      const latestDoc = group[0]; // This is the doc we display
+      
+      // Aggregate pending items from ALL versions in this group
+      const totalNotifications = group.reduce((sum, d) => 
+          sum + (d.approvalItems?.filter(i => i.status === 'pending').length || 0), 0
+      );
+
+      // Determine status: if ANY doc in group is processing, the whole group is processing
+      const anyProcessing = group.some(d => d.status === 'processing' || d.status === 'pending');
+
+      return {
+          id: latestDoc.id, // Clicking opens the latest doc
+          title: latestDoc.title,
+          sender: latestDoc.sender,
+          sku: latestDoc.code,
+          code: latestDoc.productionOrder || latestDoc.code, // Shows LATEST PO
+          date: latestDoc.date, // Shows LATEST Date
+          status: anyProcessing ? 'pending' : 'completed',
+          notificationCount: totalNotifications,
+          isMyTask: true, // Simplified for demo
+          type: 'folder'
+      };
+  });
 
   const myTasks = tasks.filter(t => t.isMyTask);
   const allTasks = tasks;
   let displayTasks = activeTab === 'MY_ITEMS' ? myTasks : allTasks;
 
+  // --- FILTER: SEARCH ---
   if (searchTerm) {
     displayTasks = displayTasks.filter(t => 
         t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -102,8 +140,24 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
     );
   }
 
+  // --- FILTER: DATE (Today, Yesterday, All) ---
+  const todayStr = new Date().toLocaleDateString('en-GB');
+  const getYesterdayStr = () => {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      return d.toLocaleDateString('en-GB');
+  };
+  const yesterdayStr = getYesterdayStr();
+
+  displayTasks = displayTasks.filter(t => {
+      if (dateFilter === 'ALL') return true;
+      if (dateFilter === 'TODAY') return t.date === todayStr;
+      if (dateFilter === 'YESTERDAY') return t.date === yesterdayStr;
+      return true;
+  });
+
+  // Final Sort for Display (redundant but safe)
   displayTasks.sort((a, b) => {
-     // Parse date DD/MM/YYYY
      const [dayA, monthA, yearA] = a.date.split('/');
      const [dayB, monthB, yearB] = b.date.split('/');
      const dateA = new Date(parseInt(yearA), parseInt(monthA) - 1, parseInt(dayA));
@@ -491,12 +545,26 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
          </button>
       </div>
 
-      {/* Date Filters */}
+      {/* Date Filters - UPDATED */}
       <div className="px-4 py-3 flex gap-2 overflow-x-auto no-scrollbar bg-white border-b border-gray-100">
-         <button className="whitespace-nowrap px-3 py-1 rounded-full border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">Hôm nay</button>
-         <button className="whitespace-nowrap px-3 py-1 rounded-full border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">3 ngày qua</button>
-         <button className="whitespace-nowrap px-3 py-1 rounded-full border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">7 ngày qua</button>
-         <button className="whitespace-nowrap px-3 py-1 rounded-full bg-[#1F2937] text-white text-xs font-medium">Toàn bộ</button>
+         <button 
+            onClick={() => setDateFilter('TODAY')}
+            className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${dateFilter === 'TODAY' ? 'bg-blue-600 text-white border-blue-600' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+         >
+             Hôm nay
+         </button>
+         <button 
+            onClick={() => setDateFilter('YESTERDAY')}
+            className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${dateFilter === 'YESTERDAY' ? 'bg-blue-600 text-white border-blue-600' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+         >
+             Hôm qua
+         </button>
+         <button 
+            onClick={() => setDateFilter('ALL')}
+            className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${dateFilter === 'ALL' ? 'bg-[#1F2937] text-white border-[#1F2937]' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+         >
+             Toàn bộ
+         </button>
       </div>
 
       {/* List Content */}
@@ -548,7 +616,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
                     <div className="mt-1.5 flex items-center justify-between text-[10px] text-gray-500">
                         <div className="flex items-center gap-3">
                         <span className="flex items-center gap-1"><Clock size={10} /> {task.date}</span>
-                        <span className="text-blue-600 font-medium">{task.code}</span>
+                        <span className="text-blue-600 font-medium bg-blue-50 px-1.5 rounded">{task.code}</span>
                         </div>
                         {task.status === 'completed' && <Check size={14} className="text-green-500" />}
                     </div>

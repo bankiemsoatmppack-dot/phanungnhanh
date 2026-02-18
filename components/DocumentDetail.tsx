@@ -5,7 +5,7 @@ import { MOCK_CHAT, MOCK_DOCUMENTS } from '../constants';
 import ImageViewer from './ImageViewer';
 import { compressImage } from '../utils';
 import { saveChatToSheet, saveHoSoToSheet, uploadToGoogleDrive, getActionLogs } from '../services/storageService';
-import { Send, Paperclip, Save, Printer, Share2, MoreHorizontal, PenTool, Layers, Palette, Ruler, AlertCircle, MessageSquare, Trash2, CheckCircle, RefreshCcw, Image as ImageIcon, Download, FileSpreadsheet, ClipboardCheck, FileText, Table, Calendar, User, Building, AlertTriangle, Edit3, X, History, Eye, Link, Database, Cloud, Clock, Check, ArrowRight } from 'lucide-react';
+import { Send, Paperclip, Save, Printer, Share2, MoreHorizontal, PenTool, Layers, Palette, Ruler, AlertCircle, MessageSquare, Trash2, CheckCircle, RefreshCcw, Image as ImageIcon, Download, FileSpreadsheet, ClipboardCheck, FileText, Table, Calendar, User, Building, AlertTriangle, Edit3, X, History, Eye, Link, Database, Cloud, Clock, Check, ArrowRight, CornerUpRight, Tag } from 'lucide-react';
 
 interface Props {
   document: Document;
@@ -18,6 +18,10 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
   // Use messages from document or fallback to empty array (not mock data for fresh docs)
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  
+  // State for Message Actions
+  const [activeMsgId, setActiveMsgId] = useState<string | null>(null); // For showing the "Push to..." menu
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null); // Ref for auto-scrolling
 
@@ -92,16 +96,58 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
     setChatMessage(msg.text);
   };
 
+  // --- MANUAL PUSH TO APPROVAL (The Fix for "Flexible Click") ---
+  const handleManualPush = (msg: ChatMessage, category: ApprovalItem['category']) => {
+      const newItem: ApprovalItem = {
+          id: Date.now().toString() + Math.random(),
+          sourceId: msg.id,
+          content: msg.text || (msg.images?.length ? 'Hình ảnh được chuyển sang' : 'Nội dung chuyển tiếp'),
+          image: (msg.images && msg.images.length > 0) ? msg.images[0] : msg.image, // Prioritize new array, fallback old
+          category: category,
+          solution: '',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          status: 'pending',
+          reporter: msg.sender
+      };
+
+      const updatedDoc = {
+          ...document,
+          approvalItems: [...(document.approvalItems || []), newItem]
+      };
+      
+      onUpdateDocument(updatedDoc);
+      setActiveMsgId(null); // Close menu
+      
+      // Optional: Notify user
+      // alert(`Đã chuyển nội dung sang mục: ${category}`);
+  };
+
   const handleSendMessage = async () => {
     if (!chatMessage.trim() && (!fileInputRef.current?.files || fileInputRef.current.files.length === 0)) return;
     
+    // 1. AUTO CATEGORIZATION LOGIC (Check Prefix)
     const lowerText = chatMessage.toLowerCase();
     let autoCategory: ApprovalItem['category'] = 'KHÁC';
-    if (lowerText.includes('sóng') || lowerText.includes('song')) autoCategory = 'SÓNG';
-    else if (lowerText.includes('in')) autoCategory = 'IN';
-    else if (lowerText.includes('thành phẩm') || lowerText.includes('thanh pham') || lowerText.includes('bế')) autoCategory = 'THÀNH PHẨM';
-    else if (lowerText.includes('kho')) autoCategory = 'KHO';
-    else if (lowerText.includes('tckt') || lowerText.includes('kỹ thuật') || lowerText.includes('spec') || lowerText.includes('kích thước') || lowerText.includes('yêu cầu tckt')) autoCategory = 'TCKT';
+    
+    // Explicit prefixes take priority
+    if (chatMessage.startsWith('SÓNG:') || chatMessage.startsWith('SONG:')) autoCategory = 'SÓNG';
+    else if (chatMessage.startsWith('IN:')) autoCategory = 'IN';
+    else if (chatMessage.startsWith('TP:') || chatMessage.startsWith('THÀNH PHẨM:')) autoCategory = 'THÀNH PHẨM';
+    else if (chatMessage.startsWith('KHO:')) autoCategory = 'KHO';
+    else if (chatMessage.startsWith('TCKT:') || chatMessage.startsWith('SPEC:')) autoCategory = 'TCKT';
+    else {
+        // Fallback to keyword matching if no explicit prefix
+        if (lowerText.includes('sóng') || lowerText.includes('song')) autoCategory = 'SÓNG';
+        else if (lowerText.includes('in ấn') || lowerText.includes('bản in')) autoCategory = 'IN'; // More specific to avoid 'in' preposition
+        else if (lowerText.includes('thành phẩm') || lowerText.includes('thanh pham')) autoCategory = 'THÀNH PHẨM';
+        else if (lowerText.includes('kho ')) autoCategory = 'KHO';
+        else if (lowerText.includes('tckt') || lowerText.includes('kỹ thuật') || lowerText.includes('kích thước')) autoCategory = 'TCKT';
+    }
+
+    // Clean the message for display if it has a prefix
+    let displayMessage = chatMessage;
+    // We keep the prefix in display so users know it's tagged, or we can strip it. 
+    // Let's keep it for clarity.
 
     const images: string[] = [];
     if (fileInputRef.current?.files && fileInputRef.current.files.length > 0) {
@@ -121,7 +167,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
         id: Date.now().toString(),
         sender: 'Tôi',
         avatar: '', // Removed Avatar
-        text: chatMessage,
+        text: displayMessage,
         images: images,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isMe: true,
@@ -136,42 +182,49 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
     // Update document messages immediately
     let updatedDoc = { ...document, messages: newMessagesList };
 
-    // Auto Approval Logic
-    if (images.length > 0) {
-        images.forEach(img => {
-            const newItem: ApprovalItem = {
+    // 2. AUTO PUSH TO APPROVAL (If Category Detected)
+    if (images.length > 0 || (autoCategory !== 'KHÁC' && displayMessage.includes(':'))) {
+        // If it has images OR it was explicitly tagged (contains colon), push to approval
+        const itemsToPush: ApprovalItem[] = [];
+        
+        // If images exist, create item for images
+        if (images.length > 0) {
+             images.forEach(img => {
+                itemsToPush.push({
+                    id: Date.now().toString() + Math.random(),
+                    sourceId: newMessage.id,
+                    content: displayMessage || 'Hình ảnh từ chat',
+                    image: img,
+                    category: autoCategory !== 'KHÁC' ? autoCategory : 'KHÁC', // Default to KHAC if just image
+                    solution: '',
+                    timestamp: newMessage.timestamp,
+                    status: 'pending',
+                    reporter: newMessage.sender
+                });
+             });
+        } 
+        // If only text but categorized
+        else if (autoCategory !== 'KHÁC') {
+             itemsToPush.push({
                 id: Date.now().toString() + Math.random(),
                 sourceId: newMessage.id,
-                content: newMessage.text || 'Hình ảnh từ chat',
-                image: img,
-                category: autoCategory !== 'KHÁC' ? autoCategory : 'KHÁC', 
-                solution: '',
-                timestamp: newMessage.timestamp,
-                status: 'pending',
-                reporter: newMessage.sender
-            };
-            updatedDoc.approvalItems = [...(updatedDoc.approvalItems || []), newItem];
-        });
-    } else if (newMessage.text) {
-        if (autoCategory !== 'KHÁC') {
-             const newItem: ApprovalItem = {
-                id: Date.now().toString() + Math.random(),
-                sourceId: newMessage.id,
-                content: newMessage.text,
+                content: displayMessage,
                 category: autoCategory,
                 solution: '',
                 timestamp: newMessage.timestamp,
                 status: 'pending',
                 reporter: newMessage.sender
-            };
-            updatedDoc.approvalItems = [...(updatedDoc.approvalItems || []), newItem];
+            });
+        }
+
+        if (itemsToPush.length > 0) {
+            updatedDoc.approvalItems = [...(updatedDoc.approvalItems || []), ...itemsToPush];
         }
     }
     
     onUpdateDocument(updatedDoc);
     
     // SYNC: Save chat to Google Sheet Online
-    // PASS THE DOCUMENT to determine correct Storage Slot
     saveChatToSheet(newMessage, document);
   };
 
@@ -323,6 +376,31 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
            // 'APPROVE' - Show approvals/defects saved
            return filtered.filter(l => l.action === 'APPROVE' || l.description.includes('duyệt'));
       }
+  };
+
+  // Quick Tags Component
+  const QuickTags = () => {
+      const tags = [
+          { label: 'Sóng', code: 'SÓNG:' },
+          { label: 'In', code: 'IN:' },
+          { label: 'Thành phẩm', code: 'TP:' },
+          { label: 'Kho', code: 'KHO:' },
+          { label: 'TCKT', code: 'TCKT:' },
+      ];
+
+      return (
+          <div className="flex gap-2 mb-2 overflow-x-auto no-scrollbar pb-1">
+              {tags.map(tag => (
+                  <button 
+                    key={tag.code}
+                    onClick={() => setChatMessage(prev => tag.code + ' ' + prev)}
+                    className="flex items-center gap-1 bg-gray-100 hover:bg-blue-100 text-gray-600 hover:text-blue-700 px-2 py-1 rounded-full text-[10px] font-bold border border-gray-200 transition-colors whitespace-nowrap"
+                  >
+                      <Tag size={10}/> {tag.label}
+                  </button>
+              ))}
+          </div>
+      );
   };
 
   return (
@@ -496,68 +574,98 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                <AlertCircle size={14}/>
                <span>Nội dung chứa "TCKT, Sóng, In..." sẽ tự động phân loại sang tab Duyệt.</span>
             </div>
-            <div className="flex-1 space-y-4 mb-4 overflow-y-auto">
+            <div className="flex-1 space-y-4 mb-4 overflow-y-auto pb-4">
               {messages.length === 0 ? (
                   <div className="text-center py-12 text-gray-400 text-sm">
                       Chưa có tin nhắn nào. Bắt đầu hội thoại ngay.
                   </div>
               ) : (
                 messages.map((msg) => (
-                    <div key={msg.id} className={`flex gap-3 ${msg.isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                    <div className={`max-w-[80%] flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
-                        <div className="flex items-center gap-2 mb-1">
-                             <span className={`text-xs font-bold ${msg.isMe ? 'text-blue-700' : 'text-gray-700'}`}>
-                                 {/* Display Name Logic: "Tôi" vs Full Name */}
-                                 {msg.isMe ? 'Tôi' : msg.sender}
-                             </span>
-                             <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 rounded-full">{msg.role}</span>
+                    <div key={msg.id} className={`flex gap-3 relative group ${msg.isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                        {/* MANUAL PUSH BUTTON (Visible on Hover or Active) */}
+                        <div className={`opacity-0 group-hover:opacity-100 transition-opacity flex items-center ${activeMsgId === msg.id ? 'opacity-100' : ''}`}>
+                            <div className="relative">
+                                <button 
+                                    onClick={() => setActiveMsgId(activeMsgId === msg.id ? null : msg.id)}
+                                    className="p-2 bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 rounded-full shadow-sm border border-gray-200"
+                                    title="Chuyển sang mục Duyệt & Lưu"
+                                >
+                                    <CornerUpRight size={16} />
+                                </button>
+                                
+                                {activeMsgId === msg.id && (
+                                    <div className="absolute bottom-full mb-2 bg-white rounded-lg shadow-xl border border-gray-200 z-50 w-40 overflow-hidden animate-in fade-in zoom-in-95 duration-200 right-0">
+                                        <div className="p-2 bg-gray-50 border-b border-gray-100 text-[10px] font-bold uppercase text-gray-500">Chuyển nội dung đến:</div>
+                                        <button onClick={() => handleManualPush(msg, 'SÓNG')} className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 text-gray-700 hover:text-blue-700 flex items-center gap-2"><Layers size={12}/> Sóng</button>
+                                        <button onClick={() => handleManualPush(msg, 'IN')} className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 text-gray-700 hover:text-blue-700 flex items-center gap-2"><Palette size={12}/> In Ấn</button>
+                                        <button onClick={() => handleManualPush(msg, 'THÀNH PHẨM')} className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 text-gray-700 hover:text-blue-700 flex items-center gap-2"><ScissorsIcon size={12} className=""/> Thành Phẩm</button>
+                                        <button onClick={() => handleManualPush(msg, 'KHO')} className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 text-gray-700 hover:text-blue-700 flex items-center gap-2"><ArchiveIcon size={12} className=""/> Kho Vận</button>
+                                        <button onClick={() => handleManualPush(msg, 'TCKT')} className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 text-gray-700 hover:text-blue-700 flex items-center gap-2"><Ruler size={12}/> TCKT</button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        
-                        <div 
-                            onDoubleClick={() => handleChatDoubleClick(msg)}
-                            className={`p-3 rounded-lg text-sm shadow-sm cursor-pointer select-none transition-transform active:scale-95 ${
-                            msg.isMe ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 border border-gray-100 hover:border-blue-300'
-                        }`}>
-                            <p>{msg.text}</p>
-                            {msg.images && msg.images.length > 0 && (
-                                <div className={`grid gap-1 mt-2 ${msg.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                                    {msg.images.map((img, idx) => (
-                                        <img 
-                                            key={idx}
-                                            src={img}
-                                            onClick={(e) => { e.stopPropagation(); setPreviewImage(img); }}
-                                            className="rounded bg-white w-full h-24 object-cover border border-black/10 cursor-zoom-in"
-                                            alt={`attachment-${idx}`}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                            {msg.image && (
-                                <img 
-                                    src={msg.image} 
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setPreviewImage(msg.image!);
-                                    }}
-                                    alt="Chat attachment" 
-                                    className="mt-2 rounded-lg max-w-full h-auto border border-black/10 cursor-zoom-in" 
-                                />
-                            )}
+
+                        <div className={`max-w-[80%] flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className={`text-xs font-bold ${msg.isMe ? 'text-blue-700' : 'text-gray-700'}`}>
+                                    {/* Display Name Logic: "Tôi" vs Full Name */}
+                                    {msg.isMe ? 'Tôi' : msg.sender}
+                                </span>
+                                <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 rounded-full">{msg.role}</span>
+                            </div>
+                            
+                            <div 
+                                onDoubleClick={() => handleChatDoubleClick(msg)}
+                                className={`p-3 rounded-lg text-sm shadow-sm cursor-pointer select-none transition-transform active:scale-95 ${
+                                msg.isMe ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 border border-gray-100 hover:border-blue-300'
+                            }`}>
+                                <p>{msg.text}</p>
+                                {msg.images && msg.images.length > 0 && (
+                                    <div className={`grid gap-1 mt-2 ${msg.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                        {msg.images.map((img, idx) => (
+                                            <img 
+                                                key={idx}
+                                                src={img}
+                                                onClick={(e) => { e.stopPropagation(); setPreviewImage(img); }}
+                                                className="rounded bg-white w-full h-24 object-cover border border-black/10 cursor-zoom-in"
+                                                alt={`attachment-${idx}`}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                                {msg.image && (
+                                    <img 
+                                        src={msg.image} 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPreviewImage(msg.image!);
+                                        }}
+                                        alt="Chat attachment" 
+                                        className="mt-2 rounded-lg max-w-full h-auto border border-black/10 cursor-zoom-in" 
+                                    />
+                                )}
+                            </div>
+                            <span className={`text-[9px] block mt-1 mx-1 ${msg.isMe ? 'text-blue-300' : 'text-gray-400'}`}>{msg.timestamp}</span>
                         </div>
-                        <span className={`text-[9px] block mt-1 mx-1 ${msg.isMe ? 'text-blue-300' : 'text-gray-400'}`}>{msg.timestamp}</span>
-                    </div>
                     </div>
                 ))
               )}
               {/* Dummy div to scroll to */}
               <div ref={chatEndRef} />
             </div>
+            
             {/* Input Area */}
-            <div className="bg-white p-2 rounded-lg border border-gray-300 flex items-center gap-2 shadow-sm">
-                <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handleSendMessage} />
-                <button onClick={() => fileInputRef.current?.click()} className="text-gray-400 hover:text-gray-600"><Paperclip size={20}/></button>
-                <input type="text" value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="Nhập nội dung... (VD: Yêu cầu TCKT mới)" className="flex-1 outline-none text-sm"/>
-                <button onClick={handleSendMessage} className="bg-blue-600 p-2 rounded text-white hover:bg-blue-700"><Send size={16}/></button>
+            <div className="bg-white p-2 rounded-lg border border-gray-300 shadow-sm relative">
+                {/* Quick Tags Bar */}
+                <QuickTags />
+                
+                <div className="flex items-center gap-2">
+                    <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handleSendMessage} />
+                    <button onClick={() => fileInputRef.current?.click()} className="text-gray-400 hover:text-gray-600"><Paperclip size={20}/></button>
+                    <input type="text" value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="Nhập nội dung... (Gõ 'TCKT:' để tự động lưu)" className="flex-1 outline-none text-sm"/>
+                    <button onClick={handleSendMessage} className="bg-blue-600 p-2 rounded text-white hover:bg-blue-700"><Send size={16}/></button>
+                </div>
             </div>
           </div>
         )}
