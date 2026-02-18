@@ -2,11 +2,18 @@
 import { Document, ChatMessage, ChartDataPoint, Employee, MobileTask, Announcement } from './types';
 
 export const MOCK_EMPLOYEES: Employee[] = [
-  { id: '1', stt: 1, name: 'Nguyễn Văn A', username: 'NV001', department: 'IN', status: 'active', createdAt: '20/10/2023' },
-  { id: '2', stt: 2, name: 'Trần Thị B', username: 'NV002', department: 'KHO', status: 'active', createdAt: '21/10/2023' },
-  { id: '3', stt: 3, name: 'Lê Văn C', username: 'NV003', department: 'KCS', status: 'inactive', createdAt: '22/10/2023' },
-  { id: '4', stt: 4, name: 'Phạm Thị D', username: 'NV004', department: 'SX', status: 'active', createdAt: '23/10/2023' },
-  { id: '5', stt: 5, name: 'Hoàng Văn E', username: 'NV005', department: 'GIAO NHẬN', status: 'active', createdAt: '24/10/2023' },
+  { id: '1', stt: 1, name: 'Nguyễn Văn A', username: 'NV001', department: 'IN', position: 'WORKER', status: 'active', createdAt: '20/10/2023' },
+  { id: '2', stt: 2, name: 'Trần Thị B', username: 'NV002', department: 'KHO', position: 'WORKER', status: 'active', createdAt: '21/10/2023' },
+  { id: '3', stt: 3, name: 'Lê Văn C', username: 'NV003', department: 'KCS', position: 'WORKER', status: 'inactive', createdAt: '22/10/2023' },
+  { id: '4', stt: 4, name: 'Phạm Thị D', username: 'NV004', department: 'SX', position: 'WORKER', status: 'active', createdAt: '23/10/2023' },
+  { id: '5', stt: 5, name: 'Hoàng Văn E', username: 'NV005', department: 'GIAO NHẬN', position: 'WORKER', status: 'active', createdAt: '24/10/2023' },
+  
+  // High Level Roles (for Employee List view)
+  { id: '10', stt: 10, name: 'Ông Giám Đốc', username: 'giamdoc', department: 'BAN GIÁM ĐỐC', position: 'DIRECTOR', status: 'active', createdAt: '01/01/2023' },
+  { id: '11', stt: 11, name: 'Ông Phó GĐ', username: 'phogiamdoc', department: 'BAN GIÁM ĐỐC', position: 'DEPUTY_DIRECTOR', status: 'active', createdAt: '01/01/2023' },
+  { id: '12', stt: 12, name: 'Trưởng Phòng KCS', username: 'tpkcs', department: 'KCS', position: 'QA_MANAGER', status: 'active', createdAt: '01/05/2023' },
+  { id: '13', stt: 13, name: 'Trưởng Phòng SX', username: 'tpsx', department: 'SX', position: 'PROD_MANAGER', status: 'active', createdAt: '01/05/2023' },
+  { id: '14', stt: 14, name: 'IT Admin', username: 'it', department: 'IT', position: 'IT_ADMIN', status: 'active', createdAt: '01/01/2023' },
 ];
 
 export const MOCK_ANNOUNCEMENTS: Announcement[] = [

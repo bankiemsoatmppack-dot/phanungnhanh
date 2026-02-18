@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { Announcement, User } from '../types';
 import { MOCK_EMPLOYEES } from '../constants';
-import { Bell, Megaphone, Send, CheckCircle, Eye, Calendar, Plus, Trash2, User as UserIcon, Clock, X, AlertTriangle, Info, Edit3, Save } from 'lucide-react';
+import { Bell, Megaphone, Send, CheckCircle, Eye, Calendar, Plus, Trash2, User as UserIcon, Clock, X, AlertTriangle, Info, Edit3, Save, Shield } from 'lucide-react';
+import { canEditSystem } from '../utils';
 
 interface Props {
   user: User; // Current User to check read status
@@ -27,6 +28,9 @@ const Notifications: React.FC<Props> = ({ user, announcements, onMarkAsRead, onC
   // Split Announcements
   const generalAnnouncements = announcements.filter(a => a.type === 'general' || !a.type).sort((a,b) => b.id.localeCompare(a.id));
   const systemAnnouncements = announcements.filter(a => a.type === 'system').sort((a,b) => b.id.localeCompare(a.id));
+
+  // PERMISSION CHECK
+  const canEdit = canEditSystem(user);
 
   const handleEdit = (ann: Announcement) => {
       setEditingId(ann.id);
@@ -89,8 +93,8 @@ const Notifications: React.FC<Props> = ({ user, announcements, onMarkAsRead, onC
                         : (isRead ? 'border-gray-200' : 'border-blue-200 ring-1 ring-blue-100')
                 }`}
             >
-                {/* Admin Controls */}
-                {user.role === 'ADMIN' && (
+                {/* Admin Controls (Only if canEdit) */}
+                {user.role === 'ADMIN' && canEdit && (
                     <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 rounded backdrop-blur-sm p-1">
                         {!isSystem && (
                             <button onClick={(e) => { e.stopPropagation(); handleEdit(item); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Sửa">
@@ -153,23 +157,31 @@ const Notifications: React.FC<Props> = ({ user, announcements, onMarkAsRead, onC
             </div>
           </div>
           
-          {user.role === 'ADMIN' && !isCreating && (
-              <button 
-                  onClick={() => {
-                      setFormTitle('');
-                      setFormContent('');
-                      setEditingId(null);
-                      setIsCreating(true);
-                  }}
-                  className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-blue-700 transition-colors"
-              >
-                  <Plus size={16}/> Tạo thông báo
-              </button>
+          {user.role === 'ADMIN' && (
+              canEdit ? (
+                !isCreating && (
+                    <button 
+                        onClick={() => {
+                            setFormTitle('');
+                            setFormContent('');
+                            setEditingId(null);
+                            setIsCreating(true);
+                        }}
+                        className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-blue-700 transition-colors"
+                    >
+                        <Plus size={16}/> Tạo thông báo
+                    </button>
+                )
+              ) : (
+                  <div className="text-xs text-orange-600 bg-orange-50 px-3 py-2 rounded-lg border border-orange-100 flex items-center gap-2">
+                     <Shield size={14}/> Chế độ xem (Read-only)
+                  </div>
+              )
           )}
       </div>
 
       {/* CREATE / EDIT FORM */}
-      {isCreating && (
+      {isCreating && canEdit && (
          <div className="bg-white rounded-xl shadow-md border border-blue-200 p-4 mb-6 animate-in slide-in-from-top-4">
              <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
                  <h3 className="font-bold text-blue-700 flex items-center gap-2">

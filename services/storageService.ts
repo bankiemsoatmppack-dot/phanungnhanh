@@ -1,5 +1,5 @@
 
-import { DriveSlot, ChatMessage, DefectEntry, Document, Announcement } from '../types';
+import { DriveSlot, ChatMessage, DefectEntry, Document, Announcement, LoginLogEntry, User } from '../types';
 import { MOCK_ANNOUNCEMENTS } from '../constants';
 
 // Constants
@@ -41,6 +41,27 @@ export const getOnlineUserIds = (): string[] => {
     }
     
     return activeIds;
+};
+
+// --- LOGIN AUDIT LOG SERVICE ---
+export const saveLoginLog = (user: User) => {
+    const logs: LoginLogEntry[] = JSON.parse(localStorage.getItem('login_logs') || '[]');
+    const newLog: LoginLogEntry = {
+        id: Date.now().toString() + Math.random(),
+        userId: user.id,
+        userName: user.name,
+        role: user.role,
+        position: user.position || 'Unknown',
+        timestamp: new Date().toLocaleString('en-GB'),
+        ip: '192.168.1.' + Math.floor(Math.random() * 100) // Simulated IP
+    };
+    // Keep last 200 logs
+    const updatedLogs = [newLog, ...logs].slice(0, 200);
+    localStorage.setItem('login_logs', JSON.stringify(updatedLogs));
+};
+
+export const getLoginLogs = (): LoginLogEntry[] => {
+    return JSON.parse(localStorage.getItem('login_logs') || '[]');
 };
 
 // --- INTERNAL GROUP CHAT SERVICE ---

@@ -2,11 +2,22 @@
 export type TabType = 'OVERVIEW' | 'SPECS' | 'CHAT' | 'APPROVE';
 export type UserRole = 'ADMIN' | 'USER';
 
+// NEW: Granular Positions for Permissions
+export type UserPosition = 
+  | 'DIRECTOR'         // Giám đốc (Read Only Admin)
+  | 'IT_ADMIN'         // IT (Read Only Admin)
+  | 'DEPUTY_DIRECTOR'  // Phó Giám Đốc (Full Admin)
+  | 'QA_MANAGER'       // TP KCS (Full Admin)
+  | 'PROD_MANAGER'     // TP SX (Full Admin)
+  | 'WORKER'           // Công nhân (User)
+  | 'SALES';           // Kinh doanh (User)
+
 export interface User {
   id: string;
   name: string;
   username: string;
-  role: UserRole;
+  role: UserRole; // Determines UI Layout (Desktop vs Mobile)
+  position?: UserPosition; // Determines Actions (Edit/Delete)
   avatar?: string;
   department?: string;
 }
@@ -16,10 +27,21 @@ export interface Employee {
   stt: number;
   name: string;
   username: string;
-  password?: string; // In real app, never store plain text
+  password?: string; 
   department: string;
+  position: UserPosition; // Added Position
   status: 'active' | 'inactive';
   createdAt: string;
+}
+
+export interface LoginLogEntry {
+    id: string;
+    userId: string;
+    userName: string;
+    role: string;
+    position: string;
+    timestamp: string; // DD/MM/YYYY HH:mm:ss
+    ip?: string; // Simulated IP
 }
 
 export interface ReadLogEntry {

@@ -1,7 +1,9 @@
+
 import React, { useState } from 'react';
-import { User, UserRole } from 'lucide-react';
+import { User, UserRole, UserPosition } from 'lucide-react';
 import { User as AppUser } from '../types';
 import { MOCK_EMPLOYEES } from '../constants';
+import { saveLoginLog } from '../services/storageService';
 
 interface Props {
   onLogin: (user: AppUser) => void;
@@ -11,32 +13,64 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
+  const handleSuccessLogin = (user: AppUser) => {
+      saveLoginLog(user);
+      onLogin(user);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username.toLowerCase() === 'thai' && password === 'admin') {
-      onLogin({ id: '0', name: 'Thái Admin', username: 'thai', role: 'ADMIN', department: 'IT' });
-    } else {
-      // Lookup employee in mock data
-      const foundEmp = MOCK_EMPLOYEES.find(e => e.username.toLowerCase() === username.toLowerCase());
-      
-      if (foundEmp) {
-         onLogin({ 
+    const u = username.toLowerCase();
+
+    // 1. Check Hardcoded Roles first (for Demo)
+    if (u === 'thai' && password === 'admin') {
+      handleSuccessLogin({ id: '0', name: 'Thái Admin', username: 'thai', role: 'ADMIN', department: 'IT', position: 'IT_ADMIN' });
+      return;
+    }
+    if (u === 'giamdoc') {
+      handleSuccessLogin({ id: '10', name: 'Ông Giám Đốc', username: 'giamdoc', role: 'ADMIN', department: 'BAN GIÁM ĐỐC', position: 'DIRECTOR' });
+      return;
+    }
+    if (u === 'phogiamdoc') {
+      handleSuccessLogin({ id: '11', name: 'Ông Phó GĐ', username: 'phogiamdoc', role: 'ADMIN', department: 'BAN GIÁM ĐỐC', position: 'DEPUTY_DIRECTOR' });
+      return;
+    }
+    if (u === 'tpkcs') {
+      handleSuccessLogin({ id: '12', name: 'Trưởng Phòng KCS', username: 'tpkcs', role: 'ADMIN', department: 'KCS', position: 'QA_MANAGER' });
+      return;
+    }
+    if (u === 'tpsx') {
+      handleSuccessLogin({ id: '13', name: 'Trưởng Phòng SX', username: 'tpsx', role: 'ADMIN', department: 'SX', position: 'PROD_MANAGER' });
+      return;
+    }
+    if (u === 'it') {
+      handleSuccessLogin({ id: '14', name: 'IT Admin', username: 'it', role: 'ADMIN', department: 'IT', position: 'IT_ADMIN' });
+      return;
+    }
+
+
+    // 2. Lookup employee in mock data
+    const foundEmp = MOCK_EMPLOYEES.find(e => e.username.toLowerCase() === u);
+    
+    if (foundEmp) {
+        handleSuccessLogin({ 
             id: foundEmp.id, 
             name: foundEmp.name, 
             username: foundEmp.username, 
             role: 'USER',
-            department: foundEmp.department 
-         });
-      } else {
-         // Default fallback for demo if username not found
-         onLogin({ 
+            department: foundEmp.department,
+            position: foundEmp.position as UserPosition
+        });
+    } else {
+        // Default fallback for demo if username not found
+        handleSuccessLogin({ 
             id: '1', 
             name: 'Nguyễn Văn A', 
             username: username || 'NV001', 
             role: 'USER',
-            department: 'IN' // Default department
-         });
-      }
+            department: 'IN', // Default department
+            position: 'WORKER'
+        });
     }
   };
 
@@ -91,11 +125,13 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-800">
             <p className="font-bold mb-1">Gợi ý đăng nhập (Demo):</p>
-            <ul className="list-disc list-inside text-xs space-y-1 text-blue-700">
-              <li>NV001 / 123 (Công nhân/User)</li>
-              <li>thai / admin (Quản lý/Admin)</li>
-              <li>NV002 / 123 (Kho)</li>
-            </ul>
+            <div className="grid grid-cols-2 gap-2 text-[11px] text-blue-700">
+                <div>• giamdoc (Chỉ xem)</div>
+                <div>• phogiamdoc (Full quyền)</div>
+                <div>• tpkcs / tpsx (Full quyền)</div>
+                <div>• it (Chỉ xem)</div>
+                <div>• NV001 (Công nhân)</div>
+            </div>
           </div>
 
           <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-500/30 transition duration-200">

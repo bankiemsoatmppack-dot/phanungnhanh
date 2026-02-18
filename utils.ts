@@ -1,4 +1,6 @@
 
+import { User, UserPosition } from './types';
+
 /**
  * Compresses an image file to be under 100kb (approx)
  * Returns a Promise resolving to a Base64 string
@@ -79,4 +81,14 @@ export const compressImage = (file: File): Promise<string> => {
           }
         });
       }
+  };
+
+  // --- PERMISSION HELPER ---
+  // Returns TRUE if the user has Write/Edit permissions
+  // Allowed: Deputy Director, QA Manager, Prod Manager
+  // Denied: Director, IT Admin, Workers
+  export const canEditSystem = (user: User | null): boolean => {
+      if (!user || !user.position) return false;
+      const allowedPositions: UserPosition[] = ['DEPUTY_DIRECTOR', 'QA_MANAGER', 'PROD_MANAGER'];
+      return allowedPositions.includes(user.position);
   };
