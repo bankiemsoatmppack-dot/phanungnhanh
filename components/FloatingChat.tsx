@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, User, Minus, Users, Circle, MoreVertical } from 'lucide-react';
+import { MessageCircle, X, Send, User, Minus, Users, Circle, MoreVertical, Wifi, WifiOff } from 'lucide-react';
 import { User as AppUser } from '../types';
 import { MOCK_EMPLOYEES } from '../constants';
+import { getOnlineUserIds, getInternalGroupMessages, sendInternalGroupMessage } from '../services/storageService';
 
 interface Message {
     id: string;
@@ -38,114 +39,76 @@ const FloatingChat: React.FC<Props> = ({ user }) => {
     const [members, setMembers] = useState<ChatMember[]>([]);
     
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const chatContainerRef = useRef<HTMLDivElement>(null);
 
-    // Initialize Members and Status
+    // 1. POLLING for ONLINE MEMBERS and CHAT HISTORY
     useEffect(() => {
-        const initMembers = MOCK_EMPLOYEES.map((emp, index) => ({
-            id: emp.id,
-            name: emp.name,
-            // Randomly assign online status (except current user is always online logic handled later)
-            isOnline: Math.random() > 0.3, 
-            avatarColor: AVATAR_COLORS[index % AVATAR_COLORS.length],
-            department: emp.department
-        }));
-
-        // Ensure current user is in the list and Online
-        const currentUserIndex = initMembers.findIndex(m => m.id === user.id);
-        if (currentUserIndex >= 0) {
-            initMembers[currentUserIndex].isOnline = true;
-        } else {
-            // Add current user if not in mock list (e.g. Admin)
-            initMembers.push({
-                id: user.id,
-                name: user.name,
-                isOnline: true,
-                avatarColor: 'bg-blue-600',
-                department: user.department || 'AD'
-            });
-        }
-
-        setMembers(initMembers);
-
-        // Initial Dummy Messages
-        setMessages([
-            {
-                id: '1',
-                text: 'Chào mọi người, hôm nay có lịch kiểm tra máy in lúc 10h nhé.',
-                senderId: '2',
-                senderName: 'Trần Thị B',
-                isMe: false,
-                timestamp: '08:30 AM',
-                avatarColor: AVATAR_COLORS[1]
-            },
-            {
-                id: '2',
-                text: 'Ok chị, em đã chuẩn bị hồ sơ xong rồi.',
-                senderId: '4',
-                senderName: 'Phạm Thị D',
-                isMe: false,
-                timestamp: '08:35 AM',
-                avatarColor: AVATAR_COLORS[3]
-            }
-        ]);
-    }, [user]);
-
-    // Scroll to bottom
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, isOpen, showMembers]);
-
-    // Simulate Incoming Messages from Online Colleagues
-    useEffect(() => {
-        if (!isOpen) return;
-
-        const interval = setInterval(() => {
-            // Only online users (excluding me) can send messages
-            const onlineColleagues = members.filter(m => m.isOnline && m.id !== user.id);
+        // Function to refresh data
+        const refreshData = () => {
+            // A. Get Online IDs from Storage (Real-time Simulation)
+            const onlineIds = getOnlineUserIds();
             
-            if (onlineColleagues.length > 0 && Math.random() > 0.7) { // 30% chance every 5s
-                const randomSender = onlineColleagues[Math.floor(Math.random() * onlineColleagues.length)];
-                const randomPhrases = [
-                    "Đã nhận thông tin.",
-                    "Hồ sơ này cần duyệt gấp nhé mọi người.",
-                    "Ai đang trực ở kho kiểm tra giúp mình mã 005 với.",
-                    "Ok.",
-                    "Đang xử lý nhé.",
-                    "Mọi người chú ý đơn hàng Heineken nhé."
-                ];
-                const text = randomPhrases[Math.floor(Math.random() * randomPhrases.length)];
+            // B. Map Mock Employees to Online Status
+            const updatedMembers = MOCK_EMPLOYEES.map((emp, index) => ({
+                id: emp.id,
+                name: emp.name,
+                isOnline: onlineIds.includes(emp.id) || emp.id === user.id, // Current user always online
+                avatarColor: AVATAR_COLORS[index % AVATAR_COLORS.length],
+                department: emp.department
+            }));
 
-                const newMsg: Message = {
-                    id: Date.now().toString(),
-                    text: text,
-                    senderId: randomSender.id,
-                    senderName: randomSender.name,
-                    isMe: false,
-                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    avatarColor: randomSender.avatarColor
-                };
-                setMessages(prev => [...prev, newMsg]);
+            // Ensure current user (if admin not in mock) is added
+            if (!updatedMembers.find(m => m.id === user.id)) {
+                 updatedMembers.push({
+                    id: user.id,
+                    name: user.name,
+                    isOnline: true,
+                    avatarColor: 'bg-blue-600',
+                    department: user.department || 'AD'
+                 });
             }
-        }, 5000);
+            setMembers(updatedMembers);
+
+            // C. Sync Chat History
+            const storedMsgs = getInternalGroupMessages();
+            const formattedMsgs = storedMsgs.map((m: any) => ({
+                ...m,
+                isMe: m.senderId === user.id
+            }));
+            
+            // Only update if length changed to avoid jitter, or deep check
+            setMessages(prev => {
+                if (prev.length !== formattedMsgs.length) return formattedMsgs;
+                return prev;
+            });
+        };
+
+        refreshData(); // Initial load
+        const interval = setInterval(refreshData, 2000); // Poll every 2 seconds
 
         return () => clearInterval(interval);
-    }, [isOpen, members, user.id]);
+    }, [user.id]);
+
+    // Scroll to bottom when messages change
+    useEffect(() => {
+        if (isOpen) {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [messages, isOpen]);
 
     const handleSend = () => {
         if (!input.trim()) return;
         
-        const newMsg: Message = {
+        const newMsg = {
             id: Date.now().toString(),
             text: input,
             senderId: user.id,
             senderName: user.name,
-            isMe: true,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            avatarColor: 'bg-blue-600'
+            avatarColor: members.find(m => m.id === user.id)?.avatarColor || 'bg-blue-600'
         };
         
-        setMessages(prev => [...prev, newMsg]);
+        // Save to Local Storage (Shared across tabs)
+        sendInternalGroupMessage(newMsg);
         setInput('');
     };
 
@@ -224,34 +187,41 @@ const FloatingChat: React.FC<Props> = ({ user }) => {
             </div>
 
             {/* Warning Banner */}
-            <div className="bg-yellow-50 p-1.5 text-[10px] text-yellow-800 text-center border-b border-yellow-100 flex justify-center items-center gap-1">
-                <span>⚠️ Tin nhắn nhóm tự xóa khi đóng trình duyệt (Không lưu server)</span>
+            <div className="bg-blue-50 p-1.5 text-[10px] text-blue-800 text-center border-b border-blue-100 flex justify-center items-center gap-1 font-medium">
+                <Wifi size={10} className="text-green-600"/> <span>Chat Nhóm Nội Bộ (Online Real-time)</span>
             </div>
 
             <div className="flex flex-1 overflow-hidden">
                 {/* Main Chat Area */}
                 <div className="flex-1 flex flex-col bg-gray-50 relative">
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={chatContainerRef}>
-                        {messages.map(msg => (
-                            <div key={msg.id} className={`flex gap-2 ${msg.isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                                {!msg.isMe && (
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${msg.avatarColor || 'bg-gray-400'}`}>
-                                        {msg.senderName.charAt(0)}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        {messages.length === 0 ? (
+                             <div className="text-center text-gray-400 text-xs py-10 italic">
+                                 Đây là kênh chat riêng nội bộ. <br/>
+                                 Chưa có tin nhắn nào.
+                             </div>
+                        ) : (
+                            messages.map(msg => (
+                                <div key={msg.id} className={`flex gap-2 ${msg.isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                                    {!msg.isMe && (
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${msg.avatarColor || 'bg-gray-400'}`}>
+                                            {msg.senderName.charAt(0)}
+                                        </div>
+                                    )}
+                                    <div className={`flex flex-col max-w-[75%] ${msg.isMe ? 'items-end' : 'items-start'}`}>
+                                        {!msg.isMe && <span className="text-[10px] text-gray-500 ml-1 mb-0.5">{msg.senderName}</span>}
+                                        <div className={`px-3 py-2 rounded-xl text-sm break-words shadow-sm ${
+                                            msg.isMe 
+                                                ? 'bg-blue-600 text-white rounded-tr-none' 
+                                                : 'bg-white text-gray-800 border border-gray-200 rounded-tl-none'
+                                        }`}>
+                                            {msg.text}
+                                        </div>
+                                        <span className="text-[9px] text-gray-400 mt-0.5 px-1">{msg.timestamp}</span>
                                     </div>
-                                )}
-                                <div className={`flex flex-col max-w-[75%] ${msg.isMe ? 'items-end' : 'items-start'}`}>
-                                    {!msg.isMe && <span className="text-[10px] text-gray-500 ml-1 mb-0.5">{msg.senderName}</span>}
-                                    <div className={`px-3 py-2 rounded-xl text-sm break-words shadow-sm ${
-                                        msg.isMe 
-                                            ? 'bg-blue-600 text-white rounded-tr-none' 
-                                            : 'bg-white text-gray-800 border border-gray-200 rounded-tl-none'
-                                    }`}>
-                                        {msg.text}
-                                    </div>
-                                    <span className="text-[9px] text-gray-400 mt-0.5 px-1">{msg.timestamp}</span>
                                 </div>
-                            </div>
-                        ))}
+                            ))
+                        )}
                         <div ref={messagesEndRef} />
                     </div>
 
@@ -284,7 +254,7 @@ const FloatingChat: React.FC<Props> = ({ user }) => {
                         <div className="flex-1 overflow-y-auto p-2 space-y-1">
                             {/* Sort: Online first, then by name */}
                             {[...members].sort((a, b) => (a.isOnline === b.isOnline ? 0 : a.isOnline ? -1 : 1)).map(member => (
-                                <div key={member.id} className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 transition-colors cursor-default">
+                                <div key={member.id} className={`flex items-center gap-2 p-2 rounded transition-colors cursor-default ${member.isOnline ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
                                     <div className="relative">
                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${member.avatarColor}`}>
                                             {member.name.charAt(0)}
@@ -297,9 +267,11 @@ const FloatingChat: React.FC<Props> = ({ user }) => {
                                         <div className="text-xs font-bold text-gray-800 truncate">{member.name}</div>
                                         <div className="text-[10px] text-gray-500 flex justify-between">
                                             <span>{member.department}</span>
-                                            <span className={member.isOnline ? 'text-green-600' : 'text-gray-400'}>
-                                                {member.isOnline ? 'Online' : 'Offline'}
-                                            </span>
+                                            {member.isOnline ? (
+                                                <span className="text-green-600 font-bold flex items-center gap-0.5"><Wifi size={8}/> On</span>
+                                            ) : (
+                                                <span className="text-gray-400">Off</span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

@@ -5,6 +5,57 @@ import { DriveSlot, ChatMessage, DefectEntry, Document } from '../types';
 const HARD_LIMIT_BYTES = 15 * 1024 * 1024 * 1024; // 15GB (Google Drive Limit)
 const SAFE_LIMIT_BYTES = 11 * 1024 * 1024 * 1024; // 11GB (Safe Threshold for new docs)
 
+// --- PRESENCE SERVICE (Real-time Online Status) ---
+export const updatePresence = (userId: string) => {
+    const presence = JSON.parse(localStorage.getItem('online_presence') || '{}');
+    presence[userId] = Date.now(); // Update heartbeat
+    localStorage.setItem('online_presence', JSON.stringify(presence));
+};
+
+export const setOffline = (userId: string) => {
+    const presence = JSON.parse(localStorage.getItem('online_presence') || '{}');
+    delete presence[userId];
+    localStorage.setItem('online_presence', JSON.stringify(presence));
+};
+
+export const getOnlineUserIds = (): string[] => {
+    const presence = JSON.parse(localStorage.getItem('online_presence') || '{}');
+    const now = Date.now();
+    const activeIds: string[] = [];
+    const threshold = 15000; // 15 seconds timeout
+
+    // Filter users active within last 15s
+    Object.keys(presence).forEach(id => {
+        if (now - presence[id] < threshold) {
+            activeIds.push(id);
+        } else {
+            // Lazy cleanup
+            delete presence[id];
+        }
+    });
+    
+    // Update cleanup if needed (optional optimization)
+    if (Object.keys(presence).length !== activeIds.length) {
+         localStorage.setItem('online_presence', JSON.stringify(presence));
+    }
+    
+    return activeIds;
+};
+
+// --- INTERNAL GROUP CHAT SERVICE ---
+export const sendInternalGroupMessage = (msg: any) => {
+    const history = JSON.parse(localStorage.getItem('internal_group_chat') || '[]');
+    const updatedHistory = [...history, msg];
+    // Limit to last 100 messages to save space
+    if (updatedHistory.length > 100) updatedHistory.shift();
+    localStorage.setItem('internal_group_chat', JSON.stringify(updatedHistory));
+};
+
+export const getInternalGroupMessages = (): any[] => {
+    return JSON.parse(localStorage.getItem('internal_group_chat') || '[]');
+};
+
+
 // Helper: Get all slots
 const getSlots = (): DriveSlot[] => {
     const saved = localStorage.getItem('storage_slots');

@@ -15,6 +15,7 @@ import FloatingChat from './components/FloatingChat'; // Import Floating Chat
 import { MOCK_DOCUMENTS, MOCK_ANNOUNCEMENTS } from './constants';
 import { Document, User, DefectEntry, Announcement } from './types';
 import { Plus, AlertTriangle, Settings as SettingsIcon, ClipboardList, ArrowRight } from 'lucide-react';
+import { updatePresence, setOffline } from './services/storageService';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -42,6 +43,32 @@ const App: React.FC = () => {
           setSelectedDocId(first.id);
       }
   }, []);
+
+  // --- HEARTBEAT & LOGOUT HANDLER ---
+  useEffect(() => {
+      let interval: ReturnType<typeof setInterval>;
+      
+      if (user) {
+          // Immediately update status
+          updatePresence(user.id);
+          
+          // Send heartbeat every 5 seconds to stay "Online"
+          interval = setInterval(() => {
+              updatePresence(user.id);
+          }, 5000);
+      }
+
+      return () => {
+          if (interval) clearInterval(interval);
+      };
+  }, [user]);
+
+  const handleLogout = () => {
+      if (user) {
+          setOffline(user.id);
+          setUser(null);
+      }
+  };
 
   // Check storage configuration and Missing Solutions on mount/update
   useEffect(() => {
@@ -207,7 +234,7 @@ const App: React.FC = () => {
         <>
             <MobileUserView 
                 user={user} 
-                onLogout={() => setUser(null)} 
+                onLogout={handleLogout} 
                 documents={documents}
                 onAddDocument={handleAddDocument}
                 onUpdateDocument={handleUpdateDocument}
@@ -270,7 +297,7 @@ const App: React.FC = () => {
         <Sidebar 
             currentView={currentView} 
             onChangeView={setCurrentView} 
-            onLogout={() => setUser(null)}
+            onLogout={handleLogout}
             role={user.role}
             notificationCount={unreadAnnouncementsCount}
         />
