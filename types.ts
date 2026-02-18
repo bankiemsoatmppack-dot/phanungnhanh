@@ -35,6 +35,7 @@ export interface Announcement {
   date: string; // DD/MM/YYYY
   author: string;
   readLog: ReadLogEntry[]; // Replaces simple string[] to track time
+  type?: 'general' | 'system'; // NEW: Distinguish between General News and System Alerts
 }
 
 export interface MobileTask {

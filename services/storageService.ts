@@ -157,11 +157,11 @@ export const initializeSystemSlot = async (slotId: number, userDriveLink: string
     ];
     localStorage.setItem(`sheet_hoso_${newSheetId}_headers`, JSON.stringify(hosoHeaders));
     
-    const announcementHeaders = ['ID', 'NGÀY', 'TIÊU ĐỀ', 'NỘI DUNG', 'NGƯỜI ĐĂNG', 'LOG ĐỌC (JSON)'];
+    const announcementHeaders = ['ID', 'NGÀY', 'TIÊU ĐỀ', 'NỘI DUNG', 'NGƯỜI ĐĂNG', 'LOG ĐỌC (JSON)', 'LOẠI'];
     localStorage.setItem(`sheet_announcements_${newSheetId}_headers`, JSON.stringify(announcementHeaders));
 
     // Initialize with some mock data IF it's the first time
-    const initialAnnouncements = MOCK_ANNOUNCEMENTS;
+    const initialAnnouncements = MOCK_ANNOUNCEMENTS.map(a => ({...a, type: 'general'}));
     localStorage.setItem(`sheet_data_announcements_${newSheetId}`, JSON.stringify(initialAnnouncements));
 
 
@@ -324,14 +324,37 @@ export const saveAnnouncementToSheet = async (announcement: Announcement): Promi
     const key = `sheet_data_announcements_${slot.sheetId}`;
     const currentData: Announcement[] = JSON.parse(localStorage.getItem(key) || '[]');
     
-    // Add new announcement
-    const updatedData = [announcement, ...currentData];
+    // CHECK FOR UPDATE vs CREATE
+    const existingIndex = currentData.findIndex(a => a.id === announcement.id);
+    let updatedData;
+    
+    if (existingIndex >= 0) {
+        // Update existing
+        updatedData = currentData.map(a => a.id === announcement.id ? announcement : a);
+    } else {
+        // Create new
+        updatedData = [announcement, ...currentData];
+    }
+    
     localStorage.setItem(key, JSON.stringify(updatedData));
     
     // Increment Usage (~1KB)
     incrementUsage(slot.id, 1024);
     
     console.log(`[Sheet-ANNOUNCE] Saved to Repo #${slot.id}`, announcement);
+    return true;
+};
+
+export const deleteAnnouncementFromSheet = async (announcementId: string): Promise<boolean> => {
+    const slot = getPrimaryActiveSlot();
+    if (!slot) return false;
+
+    const key = `sheet_data_announcements_${slot.sheetId}`;
+    const currentData: Announcement[] = JSON.parse(localStorage.getItem(key) || '[]');
+
+    const updatedData = currentData.filter(a => a.id !== announcementId);
+
+    localStorage.setItem(key, JSON.stringify(updatedData));
     return true;
 };
 

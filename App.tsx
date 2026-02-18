@@ -15,7 +15,7 @@ import FloatingChat from './components/FloatingChat'; // Import Floating Chat
 import { MOCK_DOCUMENTS } from './constants';
 import { Document, User, DefectEntry, Announcement } from './types';
 import { Plus, AlertTriangle, Settings as SettingsIcon, ClipboardList, ArrowRight, Loader2, Database } from 'lucide-react';
-import { updatePresence, setOffline, fetchAnnouncementsFromSheet, saveAnnouncementToSheet, updateAnnouncementReadStatusInSheet } from './services/storageService';
+import { updatePresence, setOffline, fetchAnnouncementsFromSheet, saveAnnouncementToSheet, updateAnnouncementReadStatusInSheet, deleteAnnouncementFromSheet } from './services/storageService';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -98,11 +98,12 @@ const App: React.FC = () => {
                // Inject Alert if no config
                const alert: Announcement = {
                     id: alertId,
-                    title: '⚠️ SỰ CỐ HỆ THỐNG: CHƯA CÓ KHO LƯU TRỮ',
-                    content: 'Hệ thống chưa tìm thấy kết nối đến Google Drive/Sheet. Dữ liệu hiện tại chỉ được lưu tạm thời trên trình duyệt. Vui lòng vào Cấu hình để khắc phục ngay.',
+                    title: 'LỖI CẤU HÌNH: KHO LƯU TRỮ',
+                    content: 'Hệ thống chưa tìm thấy kết nối đến Google Drive/Sheet. Dữ liệu sẽ không được lưu trực tuyến. Vui lòng vào Cấu hình ngay.',
                     date: new Date().toLocaleDateString('en-GB'),
-                    author: 'SYSTEM ADMIN',
-                    readLog: []
+                    author: 'SYSTEM',
+                    readLog: [],
+                    type: 'system' // Mark as System Alert
                 };
                 // Deduplicate
                 if (!finalAnnouncements.find(a => a.id === alertId)) {
@@ -224,7 +225,6 @@ const App: React.FC = () => {
   const handleMarkAnnouncementAsRead = async (id: string) => {
       if (!user) return;
       
-      // Optimistic Update
       const targetAnn = announcements.find(a => a.id === id);
       if (targetAnn && !targetAnn.readLog.some(log => log.userId === user.id)) {
           const newEntry = {
@@ -239,16 +239,25 @@ const App: React.FC = () => {
               ann.id === id ? { ...ann, readLog: updatedReadLog } : ann
           ));
 
-          // Persist to Sheet
           await updateAnnouncementReadStatusInSheet(id, updatedReadLog);
       }
   };
 
   const handleCreateAnnouncement = async (ann: Announcement) => {
-      // Optimistic Update
       setAnnouncements(prev => [ann, ...prev]);
-      // Persist to Sheet
       await saveAnnouncementToSheet(ann);
+  };
+
+  const handleUpdateAnnouncement = async (ann: Announcement) => {
+      setAnnouncements(prev => prev.map(a => a.id === ann.id ? ann : a));
+      await saveAnnouncementToSheet(ann); // Save handles update
+  };
+
+  const handleDeleteAnnouncement = async (id: string) => {
+      if(window.confirm('Bạn có chắc muốn xóa thông báo này?')) {
+          setAnnouncements(prev => prev.filter(a => a.id !== id));
+          await deleteAnnouncementFromSheet(id);
+      }
   };
 
   // 1. If not logged in, show Login Screen
@@ -352,6 +361,8 @@ const App: React.FC = () => {
                     announcements={announcements}
                     onMarkAsRead={handleMarkAnnouncementAsRead}
                     onCreateAnnouncement={handleCreateAnnouncement}
+                    onDeleteAnnouncement={handleDeleteAnnouncement}
+                    onUpdateAnnouncement={handleUpdateAnnouncement}
                 />
             )}
 

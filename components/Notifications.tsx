@@ -1,198 +1,256 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Announcement, User } from '../types';
 import { MOCK_EMPLOYEES } from '../constants';
-import { Bell, Megaphone, Send, CheckCircle, Eye, Calendar, Plus, Trash2, User as UserIcon, Clock, X } from 'lucide-react';
+import { Bell, Megaphone, Send, CheckCircle, Eye, Calendar, Plus, Trash2, User as UserIcon, Clock, X, AlertTriangle, Info, Edit3, Save } from 'lucide-react';
 
 interface Props {
   user: User; // Current User to check read status
   announcements: Announcement[];
   onMarkAsRead: (announcementId: string) => void;
   onCreateAnnouncement?: (ann: Announcement) => void; // Admin Only
+  onDeleteAnnouncement?: (id: string) => void; // Admin Only
+  onUpdateAnnouncement?: (ann: Announcement) => void; // Admin Only
 }
 
-const Notifications: React.FC<Props> = ({ user, announcements, onMarkAsRead, onCreateAnnouncement }) => {
-  const [activeTab, setActiveTab] = useState<'LIST' | 'CREATE'>('LIST');
-  const [newTitle, setNewTitle] = useState('');
-  const [newContent, setNewContent] = useState('');
+const Notifications: React.FC<Props> = ({ user, announcements, onMarkAsRead, onCreateAnnouncement, onDeleteAnnouncement, onUpdateAnnouncement }) => {
+  const [isCreating, setIsCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   
+  // Form State
+  const [formTitle, setFormTitle] = useState('');
+  const [formContent, setFormContent] = useState('');
+
   // State for Read Details Modal
   const [selectedAnnouncementForDetails, setSelectedAnnouncementForDetails] = useState<Announcement | null>(null);
 
-  // Sort by Date (Descending)
-  const sortedList = [...announcements].sort((a, b) => {
-     // Simple string compare for DD/MM/YYYY is risky, best convert to Date objects. 
-     // For demo, we assume format allows basic sorting or we parse.
-     const dateA = a.date.split('/').reverse().join('');
-     const dateB = b.date.split('/').reverse().join('');
-     return dateB.localeCompare(dateA);
-  });
+  // Split Announcements
+  const generalAnnouncements = announcements.filter(a => a.type === 'general' || !a.type).sort((a,b) => b.id.localeCompare(a.id));
+  const systemAnnouncements = announcements.filter(a => a.type === 'system').sort((a,b) => b.id.localeCompare(a.id));
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleEdit = (ann: Announcement) => {
+      setEditingId(ann.id);
+      setFormTitle(ann.title);
+      setFormContent(ann.content);
+      setIsCreating(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
-      if (!newTitle || !newContent || !onCreateAnnouncement) return;
+      if (!formTitle || !formContent) return;
 
-      const newAnn: Announcement = {
-          id: Date.now().toString(),
-          title: newTitle,
-          content: newContent,
-          date: new Date().toLocaleDateString('en-GB'),
-          author: user.name, // Admin Name
-          readLog: []
-      };
+      if (editingId && onUpdateAnnouncement) {
+          // Update Mode
+          const existing = announcements.find(a => a.id === editingId);
+          if (existing) {
+              const updatedAnn: Announcement = {
+                  ...existing,
+                  title: formTitle,
+                  content: formContent,
+                  // Keep original date or update? Usually keep original date for edits
+              };
+              onUpdateAnnouncement(updatedAnn);
+          }
+      } else if (onCreateAnnouncement) {
+          // Create Mode
+          const newAnn: Announcement = {
+              id: Date.now().toString(),
+              title: formTitle,
+              content: formContent,
+              date: new Date().toLocaleDateString('en-GB'),
+              author: user.name, // Admin Name
+              readLog: [],
+              type: 'general'
+          };
+          onCreateAnnouncement(newAnn);
+      }
       
-      onCreateAnnouncement(newAnn);
-      setNewTitle('');
-      setNewContent('');
-      setActiveTab('LIST');
-      alert('Đã gửi thông báo thành công!');
+      // Reset
+      setFormTitle('');
+      setFormContent('');
+      setEditingId(null);
+      setIsCreating(false);
+  };
+
+  const renderAnnouncementCard = (item: Announcement, isSystem: boolean) => {
+        const isRead = item.readLog.some(log => log.userId === user.id);
+        const readCount = item.readLog.length;
+        const totalUsers = MOCK_EMPLOYEES.length; 
+
+        return (
+            <div 
+                key={item.id} 
+                onClick={() => {
+                    if (!isRead && user.role === 'USER') onMarkAsRead(item.id);
+                }}
+                className={`bg-white rounded-xl p-4 shadow-sm border mb-3 transition-all relative group ${
+                    isSystem 
+                        ? 'border-red-200 bg-red-50/30' 
+                        : (isRead ? 'border-gray-200' : 'border-blue-200 ring-1 ring-blue-100')
+                }`}
+            >
+                {/* Admin Controls */}
+                {user.role === 'ADMIN' && (
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 rounded backdrop-blur-sm p-1">
+                        {!isSystem && (
+                            <button onClick={(e) => { e.stopPropagation(); handleEdit(item); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Sửa">
+                                <Edit3 size={14}/>
+                            </button>
+                        )}
+                        <button onClick={(e) => { e.stopPropagation(); onDeleteAnnouncement?.(item.id); }} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Xóa">
+                            <Trash2 size={14}/>
+                        </button>
+                    </div>
+                )}
+
+                <div className="flex justify-between items-start mb-2 pr-12">
+                    <div className="flex flex-col">
+                        <h3 className={`font-bold text-sm ${isSystem ? 'text-red-700 uppercase flex items-center gap-1' : (isRead ? 'text-gray-700' : 'text-blue-700')}`}>
+                            {isSystem && <AlertTriangle size={14}/>}
+                            {item.title}
+                        </h3>
+                        <div className="flex items-center gap-3 text-[10px] text-gray-500 mt-1">
+                            <span className="flex items-center gap-1"><Calendar size={10}/> {item.date}</span>
+                            {!isSystem && <span className="flex items-center gap-1 font-semibold text-gray-600"><UserIcon size={10}/> {item.author}</span>}
+                        </div>
+                    </div>
+                    {!isSystem && !isRead && user.role === 'USER' && (
+                         <span className="text-blue-600 text-[9px] font-bold animate-pulse bg-blue-50 px-2 py-0.5 rounded-full">Mới</span>
+                    )}
+                </div>
+
+                <div className="">
+                    <p className="text-gray-600 text-xs leading-relaxed whitespace-pre-wrap">{item.content}</p>
+                </div>
+
+                {/* ADMIN VIEW: READ STATS (Only for General) */}
+                {user.role === 'ADMIN' && !isSystem && (
+                    <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between text-[10px]">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setSelectedAnnouncementForDetails(item); }}
+                            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors"
+                        >
+                            <Eye size={12} /> 
+                            <span className="font-bold underline">Đã xem: {readCount}/{totalUsers}</span>
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
   };
 
   return (
-    <div className="flex-1 bg-gray-50 p-6 overflow-y-auto relative">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-            <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-3 rounded-lg text-white shadow-lg shadow-blue-500/30">
-                <Megaphone size={24} />
+    <div className="flex-1 bg-gray-50 p-4 md:p-6 overflow-y-auto relative h-full flex flex-col">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-600 p-2.5 rounded-lg text-white shadow-lg shadow-blue-500/30">
+                <Megaphone size={20} />
             </div>
             <div>
-                <h2 className="text-2xl font-bold text-gray-800">Bảng tin nội bộ</h2>
-                <p className="text-gray-500 text-sm">Thông báo kế hoạch, sự kiện và tin tức công ty</p>
+                <h2 className="text-xl font-bold text-gray-800">Bảng tin & Cảnh báo</h2>
+                <p className="text-gray-500 text-xs">Cập nhật tin tức nội bộ và theo dõi lỗi hệ thống</p>
             </div>
-            </div>
-            
-            {user.role === 'ADMIN' && (
-                <div className="flex bg-white p-1 rounded-lg border border-gray-200">
-                    <button 
-                        onClick={() => setActiveTab('LIST')}
-                        className={`px-4 py-1.5 text-sm font-bold rounded-md transition-colors ${activeTab === 'LIST' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}
-                    >
-                        Danh sách
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('CREATE')}
-                        className={`px-4 py-1.5 text-sm font-bold rounded-md transition-colors ${activeTab === 'CREATE' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}
-                    >
-                        + Tạo mới
-                    </button>
-                </div>
-            )}
-        </div>
-
-        {activeTab === 'CREATE' && user.role === 'ADMIN' ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 animate-in fade-in zoom-in-95">
-                <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-gray-700">
-                    <Send size={18} /> Soạn thông báo mới
-                </h3>
-                <form onSubmit={handleCreate} className="space-y-4">
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tiêu đề</label>
-                        <input 
-                            type="text" 
-                            value={newTitle} 
-                            onChange={(e) => setNewTitle(e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg p-3 focus:border-blue-500 outline-none font-bold"
-                            placeholder="VD: Lịch đón đoàn khách..."
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nội dung chi tiết</label>
-                        <textarea 
-                            value={newContent} 
-                            onChange={(e) => setNewContent(e.target.value)}
-                            rows={5}
-                            className="w-full border border-gray-300 rounded-lg p-3 focus:border-blue-500 outline-none"
-                            placeholder="Nhập nội dung thông báo..."
-                        />
-                    </div>
-                    <div className="flex justify-end gap-3 pt-2">
-                        <button type="button" onClick={() => setActiveTab('LIST')} className="px-5 py-2 rounded-lg border border-gray-300 font-bold text-gray-600 hover:bg-gray-50">Hủy</button>
-                        <button type="submit" className="px-6 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-500/30">Phát hành ngay</button>
-                    </div>
-                </form>
-            </div>
-        ) : (
-            <div className="space-y-4">
-                {sortedList.length === 0 ? (
-                    <div className="text-center py-12 text-gray-400">Chưa có thông báo nào.</div>
-                ) : (
-                    sortedList.map(item => {
-                        const isRead = item.readLog.some(log => log.userId === user.id);
-                        const readCount = item.readLog.length;
-                        const totalUsers = MOCK_EMPLOYEES.length; 
-
-                        return (
-                            <div 
-                                key={item.id} 
-                                onClick={() => {
-                                    if (!isRead && user.role === 'USER') onMarkAsRead(item.id);
-                                }}
-                                className={`bg-white rounded-xl p-5 shadow-sm border transition-all relative overflow-hidden group ${
-                                    isRead ? 'border-gray-200 opacity-90' : 'border-blue-200 ring-1 ring-blue-100'
-                                } ${!isRead && user.role === 'USER' ? 'cursor-pointer hover:shadow-md' : ''}`}
-                            >
-                                {/* Unread Indicator Stripe */}
-                                {!isRead && (
-                                    <div className="absolute top-0 left-0 bottom-0 w-1 bg-blue-500"></div>
-                                )}
-
-                                <div className="flex justify-between items-start mb-2 pl-2">
-                                    <div className="flex flex-col">
-                                        <h3 className={`text-lg font-bold ${isRead ? 'text-gray-700' : 'text-blue-700'}`}>
-                                            {item.title}
-                                        </h3>
-                                        <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
-                                            <span className="flex items-center gap-1"><Calendar size={12}/> {item.date}</span>
-                                            <span className="flex items-center gap-1 font-semibold text-gray-600"><UserIcon size={12}/> {item.author}</span>
-                                        </div>
-                                    </div>
-                                    {isRead ? (
-                                        <span className="flex items-center gap-1 text-green-600 text-xs font-bold bg-green-50 px-2 py-1 rounded-full">
-                                            <CheckCircle size={12} /> Đã đọc
-                                        </span>
-                                    ) : (
-                                        user.role === 'USER' && <span className="text-blue-600 text-xs font-bold animate-pulse">Mới</span>
-                                    )}
-                                </div>
-
-                                <div className="pl-2">
-                                    <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-wrap">{item.content}</p>
-                                </div>
-
-                                {/* ADMIN VIEW: READ STATS */}
-                                {user.role === 'ADMIN' && (
-                                    <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); setSelectedAnnouncementForDetails(item); }}
-                                            className="flex items-center gap-2 text-blue-600 hover:text-blue-800 transition-colors"
-                                        >
-                                            <Eye size={14} /> 
-                                            <span className="font-bold underline">Đã xem: {readCount} / {totalUsers} nhân viên</span>
-                                        </button>
-                                        <div className="flex -space-x-2 overflow-hidden">
-                                            {item.readLog.slice(0, 5).map((log, idx) => (
-                                                <div key={idx} className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-gray-200 flex items-center justify-center text-[8px] font-bold text-gray-600" title={`${log.userName} (${log.timestamp})`}>
-                                                    {log.userName.charAt(0)}
-                                                </div>
-                                            ))}
-                                            {readCount > 5 && (
-                                                <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-gray-100 flex items-center justify-center text-[8px] font-bold text-gray-500">
-                                                    +{readCount - 5}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })
-                )}
-            </div>
-        )}
+          </div>
+          
+          {user.role === 'ADMIN' && !isCreating && (
+              <button 
+                  onClick={() => {
+                      setFormTitle('');
+                      setFormContent('');
+                      setEditingId(null);
+                      setIsCreating(true);
+                  }}
+                  className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-blue-700 transition-colors"
+              >
+                  <Plus size={16}/> Tạo thông báo
+              </button>
+          )}
       </div>
 
-      {/* READ DETAILS MODAL */}
+      {/* CREATE / EDIT FORM */}
+      {isCreating && (
+         <div className="bg-white rounded-xl shadow-md border border-blue-200 p-4 mb-6 animate-in slide-in-from-top-4">
+             <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
+                 <h3 className="font-bold text-blue-700 flex items-center gap-2">
+                     {editingId ? <Edit3 size={18}/> : <Send size={18}/>} 
+                     {editingId ? 'Chỉnh sửa thông báo' : 'Soạn thông báo mới'}
+                 </h3>
+                 <button onClick={() => setIsCreating(false)} className="text-gray-400 hover:text-red-500"><X size={20}/></button>
+             </div>
+             <form onSubmit={handleSubmit} className="space-y-3">
+                  <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tiêu đề</label>
+                      <input 
+                          type="text" 
+                          value={formTitle} 
+                          onChange={(e) => setFormTitle(e.target.value)}
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none font-bold text-gray-800"
+                          placeholder="Nhập tiêu đề..."
+                          autoFocus
+                      />
+                  </div>
+                  <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nội dung</label>
+                      <textarea 
+                          value={formContent} 
+                          onChange={(e) => setFormContent(e.target.value)}
+                          rows={4}
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none"
+                          placeholder="Nhập nội dung..."
+                      />
+                  </div>
+                  <div className="flex justify-end pt-2">
+                      <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-2">
+                          <Save size={16}/> {editingId ? 'Lưu thay đổi' : 'Gửi thông báo'}
+                      </button>
+                  </div>
+             </form>
+         </div>
+      )}
+
+      {/* TWO COLUMNS LAYOUT */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden min-h-0">
+          
+          {/* COLUMN 1: GENERAL ANNOUNCEMENTS */}
+          <div className="flex flex-col bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden h-full">
+              <div className="bg-blue-50 px-4 py-3 border-b border-blue-100 flex justify-between items-center">
+                  <div className="flex items-center gap-2 text-blue-800 font-bold text-sm">
+                      <Info size={16}/> Thông Báo Nhân Viên
+                  </div>
+                  <span className="bg-blue-200 text-blue-800 text-[10px] px-2 py-0.5 rounded-full font-bold">{generalAnnouncements.length}</span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 bg-gray-50/50">
+                  {generalAnnouncements.length === 0 ? (
+                      <div className="text-center py-10 text-gray-400 italic text-sm">Không có thông báo nào</div>
+                  ) : (
+                      generalAnnouncements.map(item => renderAnnouncementCard(item, false))
+                  )}
+              </div>
+          </div>
+
+          {/* COLUMN 2: SYSTEM ALERTS */}
+          <div className="flex flex-col bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden h-full">
+              <div className="bg-red-50 px-4 py-3 border-b border-red-100 flex justify-between items-center">
+                  <div className="flex items-center gap-2 text-red-800 font-bold text-sm">
+                      <AlertTriangle size={16}/> Hệ Thống Lỗi / Cảnh Báo
+                  </div>
+                  <span className="bg-red-200 text-red-800 text-[10px] px-2 py-0.5 rounded-full font-bold">{systemAnnouncements.length}</span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 bg-gray-50/50">
+                  {systemAnnouncements.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-40 text-gray-400">
+                          <CheckCircle size={32} className="mb-2 text-green-500 opacity-50"/>
+                          <p className="text-sm">Hệ thống hoạt động bình thường</p>
+                      </div>
+                  ) : (
+                      systemAnnouncements.map(item => renderAnnouncementCard(item, true))
+                  )}
+              </div>
+          </div>
+      </div>
+
+      {/* READ DETAILS MODAL (Same as before) */}
       {selectedAnnouncementForDetails && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
               <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
