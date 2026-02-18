@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import DocumentList from './components/DocumentList';
 import POList from './components/POList';
@@ -11,25 +11,34 @@ import MobileUserView from './components/MobileUserView';
 import EmployeeManager from './components/EmployeeManager';
 import Notifications from './components/Notifications';
 import Settings from './components/Settings';
-import FloatingChat from './components/FloatingChat'; // Import Floating Chat
+import FloatingChat from './components/FloatingChat';
+import GlobalToast, { ToastMessage } from './components/GlobalToast'; // NEW IMPORT
 import { MOCK_DOCUMENTS } from './constants';
 import { Document, User, DefectEntry, Announcement } from './types';
-import { Plus, AlertTriangle, Settings as SettingsIcon, ClipboardList, ArrowRight, Loader2, Database } from 'lucide-react';
+import { Plus, AlertTriangle, Settings as SettingsIcon, ClipboardList, ArrowRight, Loader2, Database, BellRing } from 'lucide-react';
 import { updatePresence, setOffline, fetchAnnouncementsFromSheet, saveAnnouncementToSheet, updateAnnouncementReadStatusInSheet, deleteAnnouncementFromSheet, fetchDocumentsFromSheet, saveDocumentToSheet, deleteDocumentFromSheet, logAction } from './services/storageService';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<string>('DASHBOARD');
-  const [documents, setDocuments] = useState<Document[]>([]); // Init empty, load from storage
+  const [documents, setDocuments] = useState<Document[]>([]);
   
-  // Announcements State - Initialize Empty
+  // Ref to store previous state for comparison logic
+  const prevDocumentsRef = useRef<Document[]>([]);
+  
+  // Toasts State
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  // Persistent Alert Button State (List of unread doc IDs)
+  const [activeAlertDocs, setActiveAlertDocs] = useState<Set<string>>(new Set());
+
+  // Announcements State
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [announcementSource, setAnnouncementSource] = useState<{name: string, id: number} | null>(null);
   const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(false);
 
   // Selection State
   const [selectedDocId, setSelectedDocId] = useState<string>('');
-  const [selectedProductKey, setSelectedProductKey] = useState<string>(''); // Format: "Sender|Title"
+  const [selectedProductKey, setSelectedProductKey] = useState<string>('');
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isConfigMissing, setIsConfigMissing] = useState(false);
@@ -37,61 +46,148 @@ const App: React.FC = () => {
   // State for missing solution notifications
   const [missingSolutions, setMissingSolutions] = useState<{docId: string, docTitle: string, defectId: string, defectContent: string}[]>([]);
 
+  // --- NOTIFICATION LOGIC ---
+  const handleNewNotification = (doc: Document, type: 'TEXT' | 'IMAGE' | 'APPROVAL', content: string, sender: string) => {
+      // 1. Add Toast
+      const newToast: ToastMessage = {
+          id: Date.now().toString() + Math.random(),
+          docId: doc.id,
+          docTitle: doc.title,
+          sender: sender,
+          type: type,
+          content: content
+      };
+      setToasts(prev => [...prev, newToast]);
+
+      // 2. Add to Active Alert Button (Persistent until clicked)
+      // Only add if we are NOT currently viewing this document
+      if (selectedDocId !== doc.id || currentView !== 'DOCUMENTS') {
+          setActiveAlertDocs(prev => new Set(prev).add(doc.id));
+      }
+  };
+
+  const removeToast = (id: string) => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  const handleAlertClick = (docId: string) => {
+      // Navigate to the doc
+      const doc = documents.find(d => d.id === docId);
+      if (doc) {
+          setSelectedProductKey(`${doc.sender}|${doc.title}`);
+          setSelectedDocId(doc.id);
+          setCurrentView('DOCUMENTS');
+          
+          // Remove from alerts
+          setActiveAlertDocs(prev => {
+              const next = new Set(prev);
+              next.delete(docId);
+              return next;
+          });
+      }
+  };
+
   // --- LOAD DOCUMENTS FROM STORAGE (POLLING ENABLED) ---
   const loadDocuments = async (isInitialLoad = false) => {
       try {
-          const docs = await fetchDocumentsFromSheet();
+          const fetchedDocs = await fetchDocumentsFromSheet();
           
-          // Optimization: Only update state if stringified data differs to prevent UI flickering
-          // This allows us to poll frequently without performance hits if no data changed
+          // --- REAL-TIME COMPARISON LOGIC ---
+          if (!isInitialLoad && user?.role === 'ADMIN') {
+              fetchedDocs.forEach(newDoc => {
+                  const oldDoc = prevDocumentsRef.current.find(d => d.id === newDoc.id);
+                  if (!oldDoc) return; // New document created, maybe notify? Skipping for now.
+
+                  // 1. Check for New Messages
+                  const newMsgCount = newDoc.messages?.length || 0;
+                  const oldMsgCount = oldDoc.messages?.length || 0;
+
+                  if (newMsgCount > oldMsgCount) {
+                      // Get the new messages
+                      const newMessages = newDoc.messages?.slice(oldMsgCount) || [];
+                      newMessages.forEach(msg => {
+                          if (!msg.isMe && msg.sender !== user.name) { // Only notify if NOT me
+                              // Determine Type
+                              let type: 'TEXT' | 'IMAGE' = 'TEXT';
+                              let content = msg.text;
+                              
+                              if (msg.images && msg.images.length > 0) {
+                                  type = 'IMAGE';
+                                  content = 'Đã gửi hình ảnh mới';
+                              } else if (msg.image) {
+                                  type = 'IMAGE';
+                                  content = 'Đã gửi hình ảnh';
+                              }
+
+                              // Check if this specific message triggered an approval (Red Alert)
+                              // Optimization: We check approval items count below, but here we can check if message HAS images, usually urgent
+                              handleNewNotification(newDoc, type, content, msg.sender);
+                          }
+                      });
+                  }
+
+                  // 2. Check for New Approvals/Defects (Red Alert)
+                  const newApproveCount = newDoc.approvalItems?.length || 0;
+                  const oldApproveCount = oldDoc.approvalItems?.length || 0;
+                  
+                  if (newApproveCount > oldApproveCount) {
+                      // Get new items
+                      const newItems = newDoc.approvalItems?.slice(oldApproveCount) || [];
+                      newItems.forEach(item => {
+                          // Only notify if status is pending (newly added)
+                          if (item.status === 'pending') {
+                              handleNewNotification(
+                                  newDoc, 
+                                  'APPROVAL', 
+                                  `Yêu cầu: ${item.category} - ${item.content || 'Hình ảnh'}`, 
+                                  item.reporter || 'User'
+                              );
+                          }
+                      });
+                  }
+              });
+          }
+
+          // Update Reference
+          prevDocumentsRef.current = fetchedDocs;
+
+          // Update State
           setDocuments(prevDocs => {
-              if (JSON.stringify(prevDocs) !== JSON.stringify(docs)) {
-                  return docs;
+              if (JSON.stringify(prevDocs) !== JSON.stringify(fetchedDocs)) {
+                  return fetchedDocs;
               }
               return prevDocs;
           });
           
-          // Set initial selection only if needed and it's the first load
-          if (isInitialLoad && docs.length > 0 && !selectedDocId) {
-              const first = docs[0];
+          if (isInitialLoad && fetchedDocs.length > 0 && !selectedDocId) {
+              const first = fetchedDocs[0];
               setSelectedProductKey(`${first.sender}|${first.title}`);
               setSelectedDocId(first.id);
           }
       } catch (error) {
           console.error("Failed to load documents", error);
-          if (isInitialLoad) setDocuments(MOCK_DOCUMENTS); // Fallback only on initial load error
+          if (isInitialLoad) setDocuments(MOCK_DOCUMENTS);
       }
   };
 
-  // Initial Load & Real-time Polling
   useEffect(() => {
-      loadDocuments(true); // Immediate load
-
-      // Poll every 2 seconds to sync Chat & Updates from other users
+      loadDocuments(true); 
       const interval = setInterval(() => {
           loadDocuments(false);
       }, 2000);
-
       return () => clearInterval(interval);
-  }, [user]); // Reload if user switches (Logout/Login)
+  }, [user]);
 
   // --- HEARTBEAT & LOGOUT HANDLER ---
   useEffect(() => {
       let interval: ReturnType<typeof setInterval>;
-      
       if (user) {
-          // Immediately update status
           updatePresence(user.id);
-          
-          // Send heartbeat every 5 seconds to stay "Online"
           interval = setInterval(() => {
               updatePresence(user.id);
           }, 5000);
       }
-
-      return () => {
-          if (interval) clearInterval(interval);
-      };
+      return () => { if (interval) clearInterval(interval); };
   }, [user]);
 
   const handleLogout = () => {
@@ -101,11 +197,10 @@ const App: React.FC = () => {
       }
   };
 
-  // --- LOAD SYSTEM DATA (Announcements & Config) ---
+  // --- LOAD SYSTEM DATA ---
   const loadSystemData = async () => {
       setIsLoadingAnnouncements(true);
       try {
-          // 1. Check Configuration
           let hasValidConfig = false;
           try {
               const saved = localStorage.getItem('storage_slots');
@@ -116,15 +211,11 @@ const App: React.FC = () => {
           } catch (e) { hasValidConfig = false; }
           setIsConfigMissing(!hasValidConfig);
 
-          // 2. Fetch Announcements from Active Slot
           const result = await fetchAnnouncementsFromSheet();
-          
-          // System Alert Logic
           let finalAnnouncements = result.data;
           const alertId = 'sys_alert_config_missing';
           
           if (!hasValidConfig) {
-               // Inject Alert if no config
                const alert: Announcement = {
                     id: alertId,
                     title: 'LỖI CẤU HÌNH: KHO LƯU TRỮ',
@@ -132,14 +223,12 @@ const App: React.FC = () => {
                     date: new Date().toLocaleDateString('en-GB'),
                     author: 'SYSTEM',
                     readLog: [],
-                    type: 'system' // Mark as System Alert
+                    type: 'system'
                 };
-                // Deduplicate
                 if (!finalAnnouncements.find(a => a.id === alertId)) {
                     finalAnnouncements = [alert, ...finalAnnouncements];
                 }
           } else {
-               // Remove alert if config valid
                finalAnnouncements = finalAnnouncements.filter(a => a.id !== alertId);
           }
 
@@ -157,20 +246,14 @@ const App: React.FC = () => {
       }
   };
 
-  // Load on mount and when view changes to Settings (to refresh on exit)
   useEffect(() => {
       loadSystemData();
-      
-      // Polling for Config Changes (Simulating other admins changing config)
       const interval = setInterval(loadSystemData, 5000);
       return () => clearInterval(interval);
   }, []);
 
-
-  // Check Missing Solutions (Local Doc Logic)
   useEffect(() => {
      const checkSolutions = () => {
-         // Missing Solutions Check (Quét dữ liệu lỗi)
          const missing: {docId: string, docTitle: string, defectId: string, defectContent: string}[] = [];
          documents.forEach(doc => {
              if (doc.defects) {
@@ -189,21 +272,17 @@ const App: React.FC = () => {
          });
          setMissingSolutions(missing);
      };
-     
      checkSolutions();
   }, [documents]);
 
-  // Derived state for selected document to ensure we always have the latest version
   const selectedDoc = documents.find(d => d.id === selectedDocId) || documents[0] || null;
   
-  // Derived state for PO List (Filtered by selected Product)
   const filteredPOs = documents.filter(d => {
       if (!selectedProductKey) return false;
       const [sender, title] = selectedProductKey.split('|');
       return d.sender === sender && d.title === title;
   });
 
-  // Calculate notification count (UNREAD ANNOUNCEMENTS)
   const unreadAnnouncementsCount = user 
       ? announcements.filter(a => !a.readLog.some(log => log.userId === user.id)).length 
       : 0;
@@ -247,57 +326,40 @@ const App: React.FC = () => {
       }
   };
 
-  // --- DELETE & EDIT GROUP LOGIC (COL 2) ---
   const handleDeleteGroup = async (sender: string, title: string) => {
-      // Find all POs matching this group
       const relatedDocs = documents.filter(d => d.sender === sender && d.title === title);
       if (relatedDocs.length === 0) return;
-
-      // Optimistic UI Update
       setDocuments(prev => prev.filter(d => !(d.sender === sender && d.title === title)));
-      
-      // Update Storage
       for (const doc of relatedDocs) {
           await deleteDocumentFromSheet(doc.id);
       }
-      
-      // Clear selection if current selection was deleted
       if (selectedProductKey === `${sender}|${title}`) {
           setSelectedProductKey('');
           setSelectedDocId('');
       }
-
       if(user) logAction(user, 'DELETE', 'DOCUMENT', title, `Xóa toàn bộ hồ sơ khách hàng ${sender}, sản phẩm ${title} (${relatedDocs.length} POs)`);
   };
 
   const handleEditGroup = async (oldSender: string, oldTitle: string, newSender: string, newTitle: string) => {
       const relatedDocs = documents.filter(d => d.sender === oldSender && d.title === oldTitle);
-      
       const updatedDocs = documents.map(d => {
           if (d.sender === oldSender && d.title === oldTitle) {
               return { ...d, sender: newSender, title: newTitle };
           }
           return d;
       });
-      
       setDocuments(updatedDocs);
-      
-      // Update Storage
       for (const doc of relatedDocs) {
           await saveDocumentToSheet({ ...doc, sender: newSender, title: newTitle });
       }
-
-      // Update Selection Key
       if (selectedProductKey === `${oldSender}|${oldTitle}`) {
           setSelectedProductKey(`${newSender}|${newTitle}`);
       }
       if(user) logAction(user, 'UPDATE', 'DOCUMENT', newTitle, `Đổi tên SP từ ${oldTitle} -> ${newTitle}`);
   };
 
-  // --- ANNOUNCEMENT HANDLERS (PERSISTENT) ---
   const handleMarkAnnouncementAsRead = async (id: string) => {
       if (!user) return;
-      
       const targetAnn = announcements.find(a => a.id === id);
       if (targetAnn && !targetAnn.readLog.some(log => log.userId === user.id)) {
           const newEntry = {
@@ -305,13 +367,8 @@ const App: React.FC = () => {
               userName: user.name,
               timestamp: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' ' + new Date().toLocaleDateString('en-GB')
           };
-          
           const updatedReadLog = [...targetAnn.readLog, newEntry];
-          
-          setAnnouncements(prev => prev.map(ann => 
-              ann.id === id ? { ...ann, readLog: updatedReadLog } : ann
-          ));
-
+          setAnnouncements(prev => prev.map(ann => ann.id === id ? { ...ann, readLog: updatedReadLog } : ann));
           await updateAnnouncementReadStatusInSheet(id, updatedReadLog);
       }
   };
@@ -323,7 +380,7 @@ const App: React.FC = () => {
 
   const handleUpdateAnnouncement = async (ann: Announcement) => {
       setAnnouncements(prev => prev.map(a => a.id === ann.id ? ann : a));
-      await saveAnnouncementToSheet(ann); // Save handles update
+      await saveAnnouncementToSheet(ann);
   };
 
   const handleDeleteAnnouncement = async (id: string) => {
@@ -333,12 +390,10 @@ const App: React.FC = () => {
       }
   };
 
-  // 1. If not logged in, show Login Screen
   if (!user) {
     return <Login onLogin={setUser} />;
   }
 
-  // 2. If User Role is USER, show Mobile First View
   if (user.role === 'USER') {
     return (
         <>
@@ -356,9 +411,33 @@ const App: React.FC = () => {
     );
   }
 
-  // 3. If User Role is ADMIN, show Dashboard/Desktop View with Sidebar
   return (
     <div className="flex flex-col h-screen w-full bg-soft-bg font-sans overflow-hidden">
+      
+      {/* GLOBAL TOAST NOTIFICATIONS */}
+      <GlobalToast toasts={toasts} onRemove={removeToast} onClick={handleAlertClick} />
+
+      {/* ALERT BUTTON (Persistent if Missed Toast) */}
+      {activeAlertDocs.size > 0 && (
+          <div className="fixed top-20 right-4 z-50 animate-bounce">
+              <button 
+                onClick={() => {
+                    const firstDocId = Array.from(activeAlertDocs)[0];
+                    if (typeof firstDocId === 'string') {
+                        handleAlertClick(firstDocId);
+                    }
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white p-3 rounded-full shadow-lg flex items-center justify-center relative border-2 border-white transition-colors"
+                title="Có hồ sơ đang chờ phản hồi!"
+              >
+                  <BellRing size={24} className="animate-wiggle" />
+                  <span className="absolute -top-1 -right-1 bg-yellow-400 text-red-900 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border border-white">
+                      {activeAlertDocs.size}
+                  </span>
+              </button>
+          </div>
+      )}
+
       {/* Config Warning Banner */}
       {isConfigMissing && (
           <div className="bg-red-600 text-white px-4 py-2 text-sm font-bold flex justify-between items-center shadow-md z-[60] animate-in slide-in-from-top-2 duration-300">
@@ -375,7 +454,7 @@ const App: React.FC = () => {
           </div>
       )}
 
-      {/* STORAGE SLOT INDICATOR (If not missing config) */}
+      {/* STORAGE SLOT INDICATOR */}
       {!isConfigMissing && announcementSource && currentView === 'NOTIFICATIONS' && (
           <div className="bg-blue-600 text-white px-4 py-1 text-xs font-medium flex justify-center items-center gap-2 z-[60] shadow-sm">
              <Database size={12}/>
@@ -402,7 +481,9 @@ const App: React.FC = () => {
               </div>
               <div className="flex gap-2">
                  <button 
-                    onClick={() => handleFixSolution(missingSolutions[0].docId)}
+                    onClick={() => {
+                        if(missingSolutions[0]) handleFixSolution(missingSolutions[0].docId);
+                    }}
                     className="text-xs bg-orange-600 text-white px-3 py-1 rounded hover:bg-orange-700 font-bold flex items-center gap-1"
                  >
                     Cập nhật ngay <ArrowRight size={10} />
@@ -427,7 +508,7 @@ const App: React.FC = () => {
             {/* ADMIN VIEW 1: DASHBOARD */}
             {currentView === 'DASHBOARD' && <Dashboard />}
 
-            {/* ADMIN VIEW: NOTIFICATIONS (RENAMED TO ANNOUNCEMENTS) */}
+            {/* ADMIN VIEW: NOTIFICATIONS */}
             {currentView === 'NOTIFICATIONS' && (
                 <Notifications 
                     user={user}
@@ -439,11 +520,11 @@ const App: React.FC = () => {
                 />
             )}
 
-            {/* ADMIN VIEW 2: DOCUMENTS (4-COLUMN LAYOUT) */}
+            {/* ADMIN VIEW 2: DOCUMENTS */}
             {currentView === 'DOCUMENTS' && (
             <div className="flex-1 flex h-full relative">
                 
-                {/* Column 2: Product List (Grouped) */}
+                {/* Column 2: Product List */}
                 <div className={`flex w-[250px] lg:w-[300px] h-full z-20 shadow-sm border-r border-gray-200 bg-white`}>
                     <DocumentList 
                         documents={documents} 
@@ -455,7 +536,7 @@ const App: React.FC = () => {
                     />
                 </div>
 
-                {/* Column 3: PO List (Versions) - NEW */}
+                {/* Column 3: PO List */}
                 <div className="flex w-[200px] lg:w-[250px] h-full z-10 bg-gray-50 border-r border-gray-200">
                     <POList 
                         productName={selectedProductKey ? selectedProductKey.split('|')[1] : ''}
@@ -467,7 +548,6 @@ const App: React.FC = () => {
 
                 {/* Column 4: Document Details */}
                 <div className="flex flex-1 h-full bg-soft-bg overflow-hidden relative">
-                     {/* Empty State if no PO selected */}
                      {filteredPOs.length === 0 ? (
                          <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
                              <ClipboardList size={48} className="mb-2 opacity-20"/>
@@ -488,10 +568,9 @@ const App: React.FC = () => {
             {/* ADMIN VIEW 3: EMPLOYEES */}
             {currentView === 'USERS' && <EmployeeManager />}
             
-            {/* ADMIN VIEW 4: SETTINGS (Google Drive/Sheets) */}
+            {/* ADMIN VIEW 4: SETTINGS */}
             {currentView === 'SETTINGS' && <Settings />}
 
-            {/* Placeholder for other views */}
             {(currentView === 'TASKS' || currentView === 'REPORTS') && (
                 <div className="flex items-center justify-center w-full h-full text-gray-400">
                     <div className="text-center">
@@ -501,12 +580,10 @@ const App: React.FC = () => {
                 </div>
             )}
 
-            {/* Floating Chat for Admin/Desktop as well */}
             <FloatingChat user={user} />
         </div>
       </div>
 
-      {/* Modal Overlay */}
       {isAddModalOpen && (
         <AddDocumentModal 
             onClose={() => setIsAddModalOpen(false)} 
