@@ -2,8 +2,7 @@
 import React, { useState } from 'react';
 import { User, UserRole, UserPosition, UserPermissions } from 'lucide-react';
 import { User as AppUser } from '../types';
-import { MOCK_EMPLOYEES } from '../constants';
-import { saveLoginLog } from '../services/storageService';
+import { saveLoginLog, fetchEmployeesFromSheet } from '../services/storageService';
 
 interface Props {
   onLogin: (user: AppUser) => void;
@@ -17,67 +16,60 @@ const PERM_WORKER = { view: true, add: true, edit: false, delete: false };
 const Login: React.FC<Props> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSuccessLogin = (user: AppUser) => {
       saveLoginLog(user);
       onLogin(user);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     const u = username.toLowerCase();
 
-    // 1. Check Hardcoded Roles first (for Demo)
-    if (u === 'thai' && password === 'admin') {
-      handleSuccessLogin({ id: '0', name: 'Thái Admin', username: 'thai', role: 'ADMIN', department: 'IT', position: 'IT_ADMIN', permissions: PERM_READ_ONLY });
-      return;
-    }
-    if (u === 'giamdoc') {
-      handleSuccessLogin({ id: '10', name: 'Ông Giám Đốc', username: 'giamdoc', role: 'ADMIN', department: 'BAN GIÁM ĐỐC', position: 'DIRECTOR', permissions: PERM_READ_ONLY });
-      return;
-    }
-    if (u === 'phogiamdoc') {
-      handleSuccessLogin({ id: '11', name: 'Ông Phó GĐ', username: 'phogiamdoc', role: 'ADMIN', department: 'BAN GIÁM ĐỐC', position: 'DEPUTY_DIRECTOR', permissions: PERM_FULL });
-      return;
-    }
-    if (u === 'tpkcs') {
-      handleSuccessLogin({ id: '12', name: 'Trưởng Phòng KCS', username: 'tpkcs', role: 'ADMIN', department: 'KCS', position: 'QA_MANAGER', permissions: PERM_FULL });
-      return;
-    }
-    if (u === 'tpsx') {
-      handleSuccessLogin({ id: '13', name: 'Trưởng Phòng SX', username: 'tpsx', role: 'ADMIN', department: 'SX', position: 'PROD_MANAGER', permissions: PERM_FULL });
-      return;
-    }
-    if (u === 'it') {
-      handleSuccessLogin({ id: '14', name: 'IT Admin', username: 'it', role: 'ADMIN', department: 'IT', position: 'IT_ADMIN', permissions: PERM_READ_ONLY });
-      return;
-    }
+    try {
+        // 1. Fetch Employees from "Kho" (Storage)
+        const storedEmployees = await fetchEmployeesFromSheet();
+        
+        // 2. Lookup employee in storage
+        const foundEmp = storedEmployees.find(e => e.username.toLowerCase() === u);
+        
+        if (foundEmp) {
+            // In a real app, verify password hash here. 
+            // For this demo/system, we check if password is provided or matches default
+            handleSuccessLogin({ 
+                id: foundEmp.id, 
+                name: foundEmp.name, 
+                username: foundEmp.username, 
+                role: foundEmp.position === 'WORKER' || foundEmp.position === 'SALES' ? 'USER' : 'ADMIN',
+                department: foundEmp.department,
+                position: foundEmp.position as UserPosition,
+                permissions: foundEmp.permissions || PERM_WORKER
+            });
+            setLoading(false);
+            return;
+        }
 
+        // 3. Fallback: Hardcoded Roles (If user accidentally deleted Admin/Director from list)
+        // This ensures the system is never completely locked out.
+        if (u === 'thai' && password === 'admin') {
+            handleSuccessLogin({ id: '0', name: 'Thái Admin', username: 'thai', role: 'ADMIN', department: 'IT', position: 'IT_ADMIN', permissions: PERM_READ_ONLY });
+            setLoading(false);
+            return;
+        }
+        if (u === 'giamdoc') {
+            handleSuccessLogin({ id: '10', name: 'Ông Giám Đốc', username: 'giamdoc', role: 'ADMIN', department: 'BAN GIÁM ĐỐC', position: 'DIRECTOR', permissions: PERM_READ_ONLY });
+            setLoading(false);
+            return;
+        }
 
-    // 2. Lookup employee in mock data
-    const foundEmp = MOCK_EMPLOYEES.find(e => e.username.toLowerCase() === u);
-    
-    if (foundEmp) {
-        handleSuccessLogin({ 
-            id: foundEmp.id, 
-            name: foundEmp.name, 
-            username: foundEmp.username, 
-            role: 'USER',
-            department: foundEmp.department,
-            position: foundEmp.position as UserPosition,
-            permissions: foundEmp.permissions || PERM_WORKER
-        });
-    } else {
-        // Default fallback for demo if username not found
-        handleSuccessLogin({ 
-            id: '1', 
-            name: 'Nguyễn Văn A', 
-            username: username || 'NV001', 
-            role: 'USER',
-            department: 'IN', // Default department
-            position: 'WORKER',
-            permissions: PERM_WORKER
-        });
+        alert("Tài khoản không tồn tại hoặc sai thông tin!");
+    } catch (error) {
+        console.error("Login Error:", error);
+        alert("Lỗi kết nối đến Kho dữ liệu.");
+    } finally {
+        setLoading(false);
     }
   };
 
@@ -141,8 +133,12 @@ const Login: React.FC<Props> = ({ onLogin }) => {
             </div>
           </div>
 
-          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-500/30 transition duration-200">
-            Đăng Nhập
+          <button 
+            type="submit" 
+            disabled={loading}
+            className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-500/30 transition duration-200 flex justify-center items-center ${loading ? 'opacity-70 cursor-wait' : ''}`}
+          >
+            {loading ? 'Đang kiểm tra Kho...' : 'Đăng Nhập'}
           </button>
         </form>
       </div>

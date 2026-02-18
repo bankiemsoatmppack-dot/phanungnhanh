@@ -1,6 +1,6 @@
 
-import { DriveSlot, ChatMessage, DefectEntry, Document, Announcement, LoginLogEntry, User, SystemLogEntry, LogCategory, LogAction } from '../types';
-import { MOCK_ANNOUNCEMENTS, MOCK_DOCUMENTS } from '../constants';
+import { DriveSlot, ChatMessage, DefectEntry, Document, Announcement, LoginLogEntry, User, SystemLogEntry, LogCategory, LogAction, Employee } from '../types';
+import { MOCK_ANNOUNCEMENTS, MOCK_DOCUMENTS, MOCK_EMPLOYEES } from '../constants';
 
 // Constants
 const HARD_LIMIT_BYTES = 15 * 1024 * 1024 * 1024; // 15GB (Google Drive Limit)
@@ -505,5 +505,49 @@ export const deleteDocumentFromSheet = async (docId: string): Promise<boolean> =
     const docs: Document[] = JSON.parse(localStorage.getItem(key) || '[]');
     const updatedDocs = docs.filter(d => d.id !== docId);
     localStorage.setItem(key, JSON.stringify(updatedDocs));
+    return true;
+};
+
+// --- EMPLOYEE STORAGE (NEW PERSISTENCE) ---
+const EMPLOYEE_STORAGE_KEY = 'sheet_employees_master';
+
+export const initializeEmployeeStorage = () => {
+    if (!localStorage.getItem(EMPLOYEE_STORAGE_KEY)) {
+        localStorage.setItem(EMPLOYEE_STORAGE_KEY, JSON.stringify(MOCK_EMPLOYEES));
+        console.log('[Storage] Initialized Master Employee List with Mock Data');
+    }
+};
+
+export const fetchEmployeesFromSheet = async (): Promise<Employee[]> => {
+    initializeEmployeeStorage();
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 200));
+    return JSON.parse(localStorage.getItem(EMPLOYEE_STORAGE_KEY) || '[]');
+};
+
+export const saveEmployeeToSheet = async (employee: Employee): Promise<boolean> => {
+    initializeEmployeeStorage();
+    const employees: Employee[] = JSON.parse(localStorage.getItem(EMPLOYEE_STORAGE_KEY) || '[]');
+    
+    const index = employees.findIndex(e => e.id === employee.id);
+    let updatedEmployees;
+    
+    if (index >= 0) {
+        // Update existing
+        updatedEmployees = employees.map(e => e.id === employee.id ? employee : e);
+    } else {
+        // Create new
+        updatedEmployees = [...employees, employee];
+    }
+    
+    localStorage.setItem(EMPLOYEE_STORAGE_KEY, JSON.stringify(updatedEmployees));
+    return true;
+};
+
+export const deleteEmployeeFromSheet = async (employeeId: string): Promise<boolean> => {
+    initializeEmployeeStorage();
+    const employees: Employee[] = JSON.parse(localStorage.getItem(EMPLOYEE_STORAGE_KEY) || '[]');
+    const updatedEmployees = employees.filter(e => e.id !== employeeId);
+    localStorage.setItem(EMPLOYEE_STORAGE_KEY, JSON.stringify(updatedEmployees));
     return true;
 };

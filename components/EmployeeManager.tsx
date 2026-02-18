@@ -1,26 +1,31 @@
 
 import React, { useState, useEffect } from 'react';
 import { Employee, LoginLogEntry, UserPermissions, SystemLogEntry, LogCategory } from '../types';
-import { MOCK_EMPLOYEES } from '../constants';
 import { Plus, Edit2, Trash2, Search, Filter, X, Save, User, Lock, Briefcase, Eye, History, Shield, Clock, Monitor, CheckSquare, Square, FileText, Activity, Database } from 'lucide-react';
-import { getLoginLogs, getActionLogs, logAction } from '../services/storageService';
+import { getLoginLogs, getActionLogs, logAction, fetchEmployeesFromSheet, saveEmployeeToSheet, deleteEmployeeFromSheet } from '../services/storageService';
 import { canEditSystem } from '../utils';
 
 const EmployeeManager: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
 
+  // Load Data on Mount
   useEffect(() => {
+      // 1. Get Login Logs
       const logs = getLoginLogs();
       setLoginLogs(logs);
       if (logs.length > 0) {
           setCurrentUser({ position: logs[0].position, role: logs[0].role, id: logs[0].userId, name: logs[0].userName }); 
       }
-      // Load Action Logs
+      
+      // 2. Load Action Logs
       setSystemLogs(getActionLogs('ALL'));
+
+      // 3. Load Employees from Storage (The "Kho")
+      loadEmployees();
   }, []);
 
   const [activeTab, setActiveTab] = useState<'LIST' | 'HISTORY_LOGIN' | 'HISTORY_SYSTEM'>('LIST');
-  const [employees, setEmployees] = useState<Employee[]>(MOCK_EMPLOYEES);
+  const [employees, setEmployees] = useState<Employee[]>([]); // Initialize empty, load from storage
   const [loginLogs, setLoginLogs] = useState<LoginLogEntry[]>([]);
   const [systemLogs, setSystemLogs] = useState<SystemLogEntry[]>([]);
   
@@ -40,6 +45,11 @@ const EmployeeManager: React.FC = () => {
       position: 'WORKER',
       permissions: { view: true, add: false, edit: false, delete: false }
   });
+
+  const loadEmployees = async () => {
+      const storedEmployees = await fetchEmployeesFromSheet();
+      setEmployees(storedEmployees);
+  };
 
   const filteredEmployees = employees.filter(emp => 
     emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -79,21 +89,27 @@ const EmployeeManager: React.FC = () => {
       setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
       if (!canEdit) {
           alert("Bạn không có quyền xóa nhân viên!");
           return;
       }
       if (window.confirm('Bạn có chắc chắn muốn xóa nhân viên này?')) {
           const emp = employees.find(e => e.id === id);
+          
+          // Optimistic update
           setEmployees(employees.filter(e => e.id !== id));
+          
+          // Persist to Storage
+          await deleteEmployeeFromSheet(id);
+
           if(emp && currentUser) {
               logAction(currentUser, 'DELETE', 'EMPLOYEE', emp.name, `Xóa nhân viên ${emp.username}`);
           }
       }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
       e.preventDefault();
       
       if (!formData.name || !formData.username) {
@@ -101,18 +117,23 @@ const EmployeeManager: React.FC = () => {
           return;
       }
 
+      let updatedEmployee: Employee;
+
       if (editingId) {
           // Update existing
-          setEmployees(employees.map(emp => 
-            emp.id === editingId 
-                ? { ...emp, ...formData } as Employee
-                : emp
-          ));
+          const existingEmp = employees.find(e => e.id === editingId);
+          if (!existingEmp) return;
+
+          updatedEmployee = { ...existingEmp, ...formData } as Employee;
+          
+          // Optimistic UI Update
+          setEmployees(employees.map(emp => emp.id === editingId ? updatedEmployee : emp));
+          
           if(currentUser) logAction(currentUser, 'UPDATE', 'EMPLOYEE', formData.name, `Cập nhật thông tin nhân viên ${formData.username}`);
       } else {
           // Add new
-          const newId = (Math.max(...employees.map(e => parseInt(e.id))) + 1).toString();
-          const newEmployee: Employee = {
+          const newId = (employees.length > 0 ? (Math.max(...employees.map(e => parseInt(e.id))) + 1).toString() : "1");
+          updatedEmployee = {
               id: newId,
               stt: employees.length + 1,
               name: formData.name!,
@@ -124,44 +145,49 @@ const EmployeeManager: React.FC = () => {
               permissions: formData.permissions || { view: true, add: false, edit: false, delete: false },
               createdAt: new Date().toLocaleDateString('en-GB')
           };
-          setEmployees([...employees, newEmployee]);
-          if(currentUser) logAction(currentUser, 'CREATE', 'EMPLOYEE', newEmployee.name, `Thêm nhân viên mới ${newEmployee.username}`);
+          
+          // Optimistic UI Update
+          setEmployees([...employees, updatedEmployee]);
+          
+          if(currentUser) logAction(currentUser, 'CREATE', 'EMPLOYEE', updatedEmployee.name, `Thêm nhân viên mới ${updatedEmployee.username}`);
       }
+      
+      // Save to Storage ("Kho")
+      await saveEmployeeToSheet(updatedEmployee);
+      
       setIsModalOpen(false);
   };
 
   // --- PERMISSION HANDLERS ---
-  const togglePermission = (empId: string, perm: keyof UserPermissions) => {
+  const togglePermission = async (empId: string, perm: keyof UserPermissions) => {
       if (!canManagePermissions) return;
 
       const emp = employees.find(e => e.id === empId);
       if(!emp) return;
 
-      setEmployees(prev => prev.map(e => {
-          if (e.id === empId) {
-              return {
-                  ...e,
-                  permissions: {
-                      ...e.permissions,
-                      [perm]: !e.permissions[perm]
-                  }
-              };
+      const updatedEmp = {
+          ...emp,
+          permissions: {
+              ...emp.permissions,
+              [perm]: !emp.permissions[perm]
           }
-          return e;
-      }));
+      };
+
+      setEmployees(prev => prev.map(e => e.id === empId ? updatedEmp : e));
+      await saveEmployeeToSheet(updatedEmp);
       
       if(currentUser) logAction(currentUser, 'UPDATE', 'EMPLOYEE', emp.name, `Thay đổi quyền ${perm} cho ${emp.username}`);
   };
 
-  const toggleAllPermissions = (perm: keyof UserPermissions) => {
+  const toggleAllPermissions = async (perm: keyof UserPermissions) => {
       if (!canManagePermissions) return;
       
       // Check if all are currently checked
       const allChecked = filteredEmployees.every(emp => emp.permissions[perm]);
       const newValue = !allChecked;
 
-      setEmployees(prev => prev.map(emp => {
-          // Only update filtered employees (if search is active)
+      // Update state locally first
+      const updatedList = employees.map(emp => {
           if (filteredEmployees.some(fe => fe.id === emp.id)) {
               return {
                   ...emp,
@@ -172,7 +198,18 @@ const EmployeeManager: React.FC = () => {
               };
           }
           return emp;
-      }));
+      });
+      
+      setEmployees(updatedList);
+
+      // Save each updated employee to storage
+      // Note: In a real backend this would be a batch update. Here we loop.
+      for (const emp of updatedList) {
+          if (filteredEmployees.some(fe => fe.id === emp.id)) {
+              await saveEmployeeToSheet(emp);
+          }
+      }
+
       if(currentUser) logAction(currentUser, 'UPDATE', 'EMPLOYEE', 'Batch Update', `Thay đổi hàng loạt quyền ${perm}`);
   };
 
