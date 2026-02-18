@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Document } from '../types';
 import { Search, Filter, Plus, Folder, ChevronDown, ChevronRight, Layers, FileBox } from 'lucide-react';
@@ -18,7 +17,7 @@ const DocumentList: React.FC<Props> = ({ documents, selectedProductKey, onSelect
   };
 
   // Grouping Logic: Customer -> Product Name (No POs here)
-  const groupedProducts = documents.reduce<Record<string, Set<string>>>((acc, doc) => {
+  const groupedProducts = documents.reduce((acc, doc) => {
     const customer = doc.sender;
     const product = doc.title;
     
@@ -27,7 +26,16 @@ const DocumentList: React.FC<Props> = ({ documents, selectedProductKey, onSelect
     }
     acc[customer].add(product);
     return acc;
-  }, {});
+  }, {} as Record<string, Set<string>>);
+
+  // Helper to calculate pending items for a product (across all its POs)
+  const getPendingCountForProduct = (customer: string, product: string) => {
+      const productDocs = documents.filter(d => d.sender === customer && d.title === product);
+      return productDocs.reduce((total, doc) => {
+          const pendingInDoc = (doc.approvalItems || []).filter(item => item.status === 'pending').length;
+          return total + pendingInDoc;
+      }, 0);
+  };
 
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200 w-full">
@@ -79,6 +87,7 @@ const DocumentList: React.FC<Props> = ({ documents, selectedProductKey, onSelect
                             {products.map((productName) => {
                                 const currentKey = `${customer}|${productName}`;
                                 const isSelected = selectedProductKey === currentKey;
+                                const pendingCount = getPendingCountForProduct(customer, productName);
 
                                 return (
                                     <div 
@@ -87,8 +96,13 @@ const DocumentList: React.FC<Props> = ({ documents, selectedProductKey, onSelect
                                         className={`flex items-start gap-2 p-2 rounded cursor-pointer transition-colors text-sm border ${isSelected ? 'bg-blue-50 border-blue-200 text-blue-800 font-medium' : 'hover:bg-gray-50 border-transparent text-gray-600'}`}
                                     >
                                         <FileBox size={14} className={`mt-0.5 ${isSelected ? 'text-blue-500' : 'text-gray-400'}`} />
-                                        <div className="flex-1 leading-tight text-xs">
-                                            {productName}
+                                        <div className="flex-1 leading-tight text-xs flex justify-between items-center gap-2">
+                                            <span>{productName}</span>
+                                            {pendingCount > 0 && (
+                                                <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shadow-sm">
+                                                    {pendingCount}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 );

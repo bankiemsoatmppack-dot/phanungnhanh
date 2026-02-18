@@ -1,5 +1,5 @@
 
-import { Document, ChatMessage, ChartDataPoint, Employee, MobileTask } from './types';
+import { Document, ChatMessage, ChartDataPoint, Employee, MobileTask, Announcement } from './types';
 
 export const MOCK_EMPLOYEES: Employee[] = [
   { id: '1', stt: 1, name: 'Nguyễn Văn A', username: 'NV001', department: 'IN', status: 'active', createdAt: '20/10/2023' },
@@ -7,6 +7,25 @@ export const MOCK_EMPLOYEES: Employee[] = [
   { id: '3', stt: 3, name: 'Lê Văn C', username: 'NV003', department: 'KCS', status: 'inactive', createdAt: '22/10/2023' },
   { id: '4', stt: 4, name: 'Phạm Thị D', username: 'NV004', department: 'SX', status: 'active', createdAt: '23/10/2023' },
   { id: '5', stt: 5, name: 'Hoàng Văn E', username: 'NV005', department: 'GIAO NHẬN', status: 'active', createdAt: '24/10/2023' },
+];
+
+export const MOCK_ANNOUNCEMENTS: Announcement[] = [
+    {
+        id: 'a1',
+        title: 'Lịch đón đoàn khách HEINEKEN',
+        content: 'Sáng mai 08:00 ngày 25/11 có đoàn kiểm tra chất lượng từ Heineken. Yêu cầu các bộ phận 5S khu vực sản xuất sạch sẽ.',
+        date: '24/11/2023',
+        author: 'Ban Giám Đốc',
+        readBy: ['2', '4'] // Employee IDs who read this
+    },
+    {
+        id: 'a2',
+        title: 'Thông báo bảo trì máy In Flexo 01',
+        content: 'Máy In Flexo 01 sẽ dừng bảo trì từ 12:00 đến 14:00 hôm nay. Kế hoạch sản xuất đã được điều chỉnh.',
+        date: '24/11/2023',
+        author: 'Phòng Kỹ Thuật',
+        readBy: []
+    }
 ];
 
 export const MOCK_TASKS: MobileTask[] = [

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Employee } from '../types';
 import { MOCK_EMPLOYEES } from '../constants';
-import { Plus, Edit2, Trash2, Search, Filter, X, Save, User, Lock, Briefcase } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Filter, X, Save, User, Lock, Briefcase, Eye, EyeOff } from 'lucide-react';
 
 const EmployeeManager: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>(MOCK_EMPLOYEES);
@@ -28,7 +28,8 @@ const EmployeeManager: React.FC = () => {
   const handleOpenModal = (employee?: Employee) => {
       if (employee) {
           setEditingId(employee.id);
-          setFormData({ ...employee, password: '' }); // Don't show existing password
+          // Show existing password in edit mode
+          setFormData({ ...employee }); 
       } else {
           setEditingId(null);
           setFormData({
@@ -87,7 +88,7 @@ const EmployeeManager: React.FC = () => {
       <div className="p-6 border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
          <div>
             <h2 className="text-2xl font-bold text-gray-800">Quản lý nhân viên</h2>
-            <p className="text-gray-500 text-sm mt-1">Danh sách nhân sự và tài khoản hệ thống</p>
+            <p className="text-gray-500 text-sm mt-1">Danh sách nhân sự và tài khoản hệ thống (Admin view)</p>
          </div>
          <div className="flex gap-2">
             <button 
@@ -137,7 +138,10 @@ const EmployeeManager: React.FC = () => {
                      <td className="px-6 py-4 text-center font-medium text-gray-500">{index + 1}</td>
                      <td className="px-6 py-4 font-semibold text-gray-800">{emp.name}</td>
                      <td className="px-6 py-4 text-blue-600 font-mono">{emp.username}</td>
-                     <td className="px-6 py-4 text-gray-400">••••••</td>
+                     {/* Show Password Directly */}
+                     <td className="px-6 py-4 font-mono font-bold text-gray-600 bg-gray-50/50">
+                        {emp.password}
+                     </td>
                      <td className="px-6 py-4 font-medium text-gray-700">{emp.department}</td>
                      <td className="px-6 py-4 text-center">
                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
@@ -209,11 +213,11 @@ const EmployeeManager: React.FC = () => {
                            <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mật khẩu</label>
                             <input 
-                                type="password" 
+                                type="text" 
                                 value={formData.password}
                                 onChange={(e) => setFormData({...formData, password: e.target.value})}
                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" 
-                                placeholder={editingId ? "Giữ nguyên" : "Mặc định"} 
+                                placeholder="Nhập mật khẩu" 
                             />
                           </div>
                       </div>

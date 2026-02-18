@@ -22,6 +22,15 @@ export interface Employee {
   createdAt: string;
 }
 
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  date: string; // DD/MM/YYYY
+  author: string;
+  readBy: string[]; // List of User IDs who have read this
+}
+
 export interface MobileTask {
   id: string;
   title: string; // Mục con (Tên sản phẩm)

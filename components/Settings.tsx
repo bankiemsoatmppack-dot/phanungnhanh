@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { DriveSlot } from '../types';
 import { initializeSystemSlot } from '../services/storageService';
-import { Server, CheckCircle, RefreshCw, AlertCircle, Loader2, Cloud, FileSpreadsheet, Folder, ExternalLink, Link, Database, Power, AlertTriangle } from 'lucide-react';
+import { Server, CheckCircle, RefreshCw, AlertCircle, Loader2, Cloud, FileSpreadsheet, Folder, ExternalLink, Link, Database, Power, AlertTriangle, Plus } from 'lucide-react';
 
 const Settings: React.FC = () => {
   // Initial Mock Data or Load from LocalStorage
@@ -84,6 +84,26 @@ const Settings: React.FC = () => {
       }
   };
 
+  // ADD NEW SLOT FUNCTION
+  const handleAddSlot = () => {
+      const newId = (slots.length > 0 ? Math.max(...slots.map(s => s.id)) : 0) + 1;
+      const newSlot: DriveSlot = {
+          id: newId,
+          name: `Kho Dữ Liệu ${newId}`,
+          driveFolderLink: '',
+          driveFolderId: '',
+          sheetId: '',
+          totalCapacityBytes: 15 * 1024 * 1024 * 1024, // 15GB
+          usedBytes: 0,
+          isConnected: false,
+          status: 'ready',
+          isInitialized: false
+      };
+      setSlots([...slots, newSlot]);
+      // Scroll to bottom logic could be added here
+      alert(`Đã thêm Kho Dữ Liệu #${newId} thành công.`);
+  };
+
   // Helper to format bytes
   const formatSize = (bytes: number) => {
       if (bytes === 0) return '0 B';
@@ -135,7 +155,7 @@ const Settings: React.FC = () => {
         </div>
 
         {/* Slots Grid */}
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 gap-6 pb-20">
             {slots.map((slot) => {
                 const percentUsed = (slot.usedBytes / slot.totalCapacityBytes) * 100;
                 // Safe limit is ~73% (11/15)
@@ -303,6 +323,17 @@ const Settings: React.FC = () => {
                     </div>
                 );
             })}
+
+            {/* ADD NEW SLOT BUTTON */}
+            <button 
+                onClick={handleAddSlot}
+                className="w-full py-6 border-2 border-dashed border-gray-300 rounded-2xl flex items-center justify-center gap-3 text-gray-500 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-all group"
+            >
+                <div className="bg-gray-100 p-2 rounded-full group-hover:bg-blue-200 transition-colors">
+                    <Plus size={24} />
+                </div>
+                <span className="font-bold text-lg">Thêm Kho Lưu Trữ Mới</span>
+            </button>
         </div>
 
       </div>

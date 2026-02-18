@@ -11,8 +11,9 @@ import MobileUserView from './components/MobileUserView';
 import EmployeeManager from './components/EmployeeManager';
 import Notifications from './components/Notifications';
 import Settings from './components/Settings';
-import { MOCK_DOCUMENTS } from './constants';
-import { Document, User, DefectEntry } from './types';
+import FloatingChat from './components/FloatingChat'; // Import Floating Chat
+import { MOCK_DOCUMENTS, MOCK_ANNOUNCEMENTS } from './constants';
+import { Document, User, DefectEntry, Announcement } from './types';
 import { Plus, AlertTriangle, Settings as SettingsIcon, ClipboardList, ArrowRight } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -20,6 +21,9 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<string>('DASHBOARD');
   const [documents, setDocuments] = useState<Document[]>(MOCK_DOCUMENTS);
   
+  // Announcements State
+  const [announcements, setAnnouncements] = useState<Announcement[]>(MOCK_ANNOUNCEMENTS);
+
   // Selection State
   const [selectedDocId, setSelectedDocId] = useState<string>(MOCK_DOCUMENTS[0].id);
   const [selectedProductKey, setSelectedProductKey] = useState<string>(''); // Format: "Sender|Title"
@@ -98,10 +102,8 @@ const App: React.FC = () => {
       return d.sender === sender && d.title === title;
   });
 
-  // Calculate notification count (pending approval items)
-  const notificationCount = documents.reduce((acc, doc) => {
-      return acc + (doc.approvalItems || []).filter(item => item.status === 'pending').length;
-  }, 0);
+  // Calculate notification count (UNREAD ANNOUNCEMENTS)
+  const unreadAnnouncementsCount = user ? announcements.filter(a => !a.readBy.includes(user.id)).length : 0;
 
   const handleUpdateDocument = (updatedDoc: Document) => {
     setDocuments(prevDocs => 
@@ -148,6 +150,21 @@ const App: React.FC = () => {
       }
   };
 
+  // --- ANNOUNCEMENT HANDLERS ---
+  const handleMarkAnnouncementAsRead = (id: string) => {
+      if (!user) return;
+      setAnnouncements(prev => prev.map(ann => {
+          if (ann.id === id && !ann.readBy.includes(user.id)) {
+              return { ...ann, readBy: [...ann.readBy, user.id] };
+          }
+          return ann;
+      }));
+  };
+
+  const handleCreateAnnouncement = (ann: Announcement) => {
+      setAnnouncements(prev => [ann, ...prev]);
+  };
+
   // 1. If not logged in, show Login Screen
   if (!user) {
     return <Login onLogin={setUser} />;
@@ -156,13 +173,18 @@ const App: React.FC = () => {
   // 2. If User Role is USER, show Mobile First View
   if (user.role === 'USER') {
     return (
-        <MobileUserView 
-            user={user} 
-            onLogout={() => setUser(null)} 
-            documents={documents}
-            onAddDocument={handleAddDocument}
-            onUpdateDocument={handleUpdateDocument}
-        />
+        <>
+            <MobileUserView 
+                user={user} 
+                onLogout={() => setUser(null)} 
+                documents={documents}
+                onAddDocument={handleAddDocument}
+                onUpdateDocument={handleUpdateDocument}
+                announcements={announcements}
+                onMarkAnnouncementAsRead={handleMarkAnnouncementAsRead}
+            />
+            <FloatingChat user={user} />
+        </>
     );
   }
 
@@ -219,20 +241,22 @@ const App: React.FC = () => {
             onChangeView={setCurrentView} 
             onLogout={() => setUser(null)}
             role={user.role}
-            notificationCount={notificationCount}
+            notificationCount={unreadAnnouncementsCount}
         />
 
         {/* Main Content Area */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden relative">
             
             {/* ADMIN VIEW 1: DASHBOARD */}
             {currentView === 'DASHBOARD' && <Dashboard />}
 
-            {/* ADMIN VIEW: NOTIFICATIONS */}
+            {/* ADMIN VIEW: NOTIFICATIONS (RENAMED TO ANNOUNCEMENTS) */}
             {currentView === 'NOTIFICATIONS' && (
                 <Notifications 
-                    documents={documents} 
-                    onSelectDocument={handleSelectDocumentFromNotification}
+                    user={user}
+                    announcements={announcements}
+                    onMarkAsRead={handleMarkAnnouncementAsRead}
+                    onCreateAnnouncement={handleCreateAnnouncement}
                 />
             )}
 
@@ -293,6 +317,9 @@ const App: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* Floating Chat for Admin/Desktop as well */}
+            <FloatingChat user={user} />
         </div>
       </div>
 
