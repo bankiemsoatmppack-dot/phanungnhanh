@@ -492,7 +492,11 @@ const App: React.FC = () => {
 
       {/* Modal Overlay */}
       {isAddModalOpen && (
-        <AddDocumentModal onClose={() => setIsAddModalOpen(false)} />
+        <AddDocumentModal 
+            onClose={() => setIsAddModalOpen(false)} 
+            onAdd={handleAddDocument}
+            currentUser={{ name: user.name, department: user.department || 'N/A' }}
+        />
       )}
       
     </div>

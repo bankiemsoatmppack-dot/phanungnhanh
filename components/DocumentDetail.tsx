@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Document, TabType, ChatMessage, DefectEntry, ApprovalItem, SpecLogEntry, PackagingSpecs } from '../types';
+import { Document, TabType, ChatMessage, DefectEntry, ApprovalItem, SpecLogEntry, PackagingSpecs, SystemLogEntry } from '../types';
 import { MOCK_CHAT, MOCK_DOCUMENTS } from '../constants';
 import ImageViewer from './ImageViewer';
 import { compressImage } from '../utils';
-import { saveChatToSheet, saveHoSoToSheet, uploadToGoogleDrive } from '../services/storageService';
-import { Send, Paperclip, Save, Printer, Share2, MoreHorizontal, PenTool, Layers, Palette, Ruler, AlertCircle, MessageSquare, Trash2, CheckCircle, RefreshCcw, Image as ImageIcon, Download, FileSpreadsheet, ClipboardCheck, FileText, Table, Calendar, User, Building, AlertTriangle, Edit3, X, History, Eye, Link, Database, Cloud } from 'lucide-react';
+import { saveChatToSheet, saveHoSoToSheet, uploadToGoogleDrive, getActionLogs } from '../services/storageService';
+import { Send, Paperclip, Save, Printer, Share2, MoreHorizontal, PenTool, Layers, Palette, Ruler, AlertCircle, MessageSquare, Trash2, CheckCircle, RefreshCcw, Image as ImageIcon, Download, FileSpreadsheet, ClipboardCheck, FileText, Table, Calendar, User, Building, AlertTriangle, Edit3, X, History, Eye, Link, Database, Cloud, Clock, Check, ArrowRight } from 'lucide-react';
 
 interface Props {
   document: Document;
@@ -19,6 +19,10 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // History Tab State
+  const [historySubTab, setHistorySubTab] = useState<'DOC' | 'PO' | 'APPROVE'>('DOC');
+  const [docHistory, setDocHistory] = useState<SystemLogEntry[]>([]);
 
   // Admin "View All" Toggle
   const [viewAllHistory, setViewAllHistory] = useState(false);
@@ -50,6 +54,11 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
         setTempSpecs({ dimensions: '', material: '', flute: '', printTech: '', colors: [], netWeight: '' });
         setIsEditingSpecs(true);
     }
+
+    // Load History logs
+    const allLogs = getActionLogs('ALL');
+    setDocHistory(allLogs);
+
   }, [document]);
 
   // Handle Switching PO
@@ -243,6 +252,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
     { id: 'OVERVIEW', label: 'Hồ sơ & TCKT' },
     { id: 'CHAT', label: 'Chát online' },
     { id: 'APPROVE', label: 'Duyệt và Lưu' },
+    { id: 'HISTORY', label: 'Lịch sử hoạt động' },
   ];
 
   // Helper to get items based on View All mode
@@ -283,9 +293,29 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
      );
   };
 
+  // Filter logs for History Tab
+  const getFilteredLogs = () => {
+      let filtered = docHistory;
+      // Basic filter by Document Name or PO to show relevance
+      // Note: In a real app, logs would be linked by UUID. Here we filter by text search for demo.
+      const searchTerm = document.title; 
+      
+      // Filter by Sub-tab logic
+      if (historySubTab === 'DOC') {
+          return filtered.filter(l => l.category === 'DOCUMENT' && (l.targetName?.includes(document.title) || l.description.includes(document.productionOrder || '')));
+      } else if (historySubTab === 'PO') {
+           // Show actions related to creating/editing this PO specifically
+           return filtered.filter(l => l.description.includes(document.productionOrder || '###'));
+      } else {
+           // 'APPROVE' - Show approvals/defects saved
+           return filtered.filter(l => l.action === 'APPROVE' || l.description.includes('duyệt'));
+      }
+  };
+
   return (
     <>
-    <div className="flex flex-col h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    {/* CHANGED: Removed rounded-lg, shadow, and margins to make it full screen/flush */}
+    <div className="flex flex-col h-full bg-white border-l border-gray-200 overflow-hidden w-full">
       {/* Header with Title & PO Selector */}
       <div className="p-4 border-b border-gray-200 bg-white">
         <div className="flex justify-between items-start">
@@ -316,7 +346,7 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                         </select>
                     </div>
                     
-                    {/* Storage Info Badge - Column 3 Enhancement */}
+                    {/* Storage Info Badge */}
                     <div className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200" title="Dữ liệu và Hình ảnh được lưu tại Kho này">
                         <Database size={12} /> Kho {document.storageSlotId}
                     </div>
@@ -348,13 +378,14 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
               activeTab === tab.id
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {tab.label}
+             {tab.id === 'HISTORY' && <History size={14}/>}
+             {tab.label}
           </button>
         ))}
       </div>
@@ -399,7 +430,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
 
                  {/* 1.2 TCKT (Technical Specs) Management */}
                  <div className={`rounded-xl border shadow-sm transition-all duration-300 ${!document.specs ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}>
-                    {/* ... (TCKT Header & Content) ... */}
                     <div className="p-4 border-b border-gray-200/50 flex justify-between items-center">
                          <h3 className={`text-sm font-bold uppercase flex items-center gap-2 ${!document.specs ? 'text-red-700' : 'text-gray-800'}`}>
                             <Ruler size={16} /> Thông số kỹ thuật (TCKT)
@@ -461,7 +491,6 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
               ) : (
                 messages.map((msg) => (
                     <div key={msg.id} className={`flex gap-3 ${msg.isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                    {/* AVATAR REMOVED: Now using Name header instead */}
                     <div className={`max-w-[80%] flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
                         <div className="flex items-center gap-2 mb-1">
                              <span className={`text-xs font-bold ${msg.isMe ? 'text-blue-700' : 'text-gray-700'}`}>
@@ -540,6 +569,78 @@ const DocumentDetail: React.FC<Props> = ({ document, onUpdateDocument }) => {
                     {renderApproveQuadrant('IN', <Palette size={16} />, 'text-blue-600')}
                     {renderApproveQuadrant('THÀNH PHẨM', <ScissorsIcon size={16} />, 'text-purple-600')}
                     {renderApproveQuadrant('KHO', <ArchiveIcon size={16} />, 'text-green-600')}
+                </div>
+            </div>
+        )}
+
+        {/* TAB 4: HISTORY (NEW) */}
+        {activeTab === 'HISTORY' && (
+            <div className="flex flex-col h-full bg-white rounded-lg border border-gray-100">
+                {/* Sub-tabs */}
+                <div className="flex border-b border-gray-100 p-2 gap-2 bg-gray-50/50">
+                    <button 
+                        onClick={() => setHistorySubTab('DOC')}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 transition-colors ${historySubTab === 'DOC' ? 'bg-blue-600 text-white' : 'hover:bg-gray-100 text-gray-600'}`}
+                    >
+                        <FileText size={14}/> Hồ sơ
+                    </button>
+                    <button 
+                         onClick={() => setHistorySubTab('PO')}
+                         className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 transition-colors ${historySubTab === 'PO' ? 'bg-blue-600 text-white' : 'hover:bg-gray-100 text-gray-600'}`}
+                    >
+                        <Layers size={14}/> Phiếu Sản xuất
+                    </button>
+                    <button 
+                         onClick={() => setHistorySubTab('APPROVE')}
+                         className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 transition-colors ${historySubTab === 'APPROVE' ? 'bg-blue-600 text-white' : 'hover:bg-gray-100 text-gray-600'}`}
+                    >
+                        <CheckCircle size={14}/> Lưu và Duyệt
+                    </button>
+                </div>
+
+                {/* History List */}
+                <div className="flex-1 overflow-y-auto p-0">
+                    <table className="w-full text-sm text-left">
+                        <thead className="text-xs text-gray-500 uppercase bg-gray-50 sticky top-0">
+                            <tr>
+                                <th className="px-4 py-3 font-bold">Thời gian</th>
+                                <th className="px-4 py-3 font-bold">Người thực hiện</th>
+                                <th className="px-4 py-3 font-bold">Hành động</th>
+                                <th className="px-4 py-3 font-bold">Chi tiết</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {getFilteredLogs().length === 0 ? (
+                                <tr>
+                                    <td colSpan={4} className="text-center py-8 text-gray-400 italic">Chưa có hoạt động nào trong mục này</td>
+                                </tr>
+                            ) : (
+                                getFilteredLogs().map((log, idx) => (
+                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-4 py-3 whitespace-nowrap text-gray-500 font-mono text-xs">
+                                            {log.timestamp}
+                                        </td>
+                                        <td className="px-4 py-3 font-medium text-gray-800">
+                                            {log.actorName}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                                log.action === 'CREATE' ? 'bg-green-100 text-green-700' :
+                                                log.action === 'UPDATE' ? 'bg-yellow-100 text-yellow-700' :
+                                                log.action === 'DELETE' ? 'bg-red-100 text-red-700' :
+                                                'bg-blue-100 text-blue-700'
+                                            }`}>
+                                                {log.action}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-gray-600 text-xs">
+                                            {log.description}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         )}

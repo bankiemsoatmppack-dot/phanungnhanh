@@ -1,5 +1,5 @@
 
-export type TabType = 'OVERVIEW' | 'SPECS' | 'CHAT' | 'APPROVE';
+export type TabType = 'OVERVIEW' | 'SPECS' | 'CHAT' | 'APPROVE' | 'HISTORY';
 export type UserRole = 'ADMIN' | 'USER';
 
 // NEW: Granular Positions for Permissions
