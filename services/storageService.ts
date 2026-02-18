@@ -1,5 +1,6 @@
 
-import { DriveSlot, ChatMessage, DefectEntry, Document } from '../types';
+import { DriveSlot, ChatMessage, DefectEntry, Document, Announcement } from '../types';
+import { MOCK_ANNOUNCEMENTS } from '../constants';
 
 // Constants
 const HARD_LIMIT_BYTES = 15 * 1024 * 1024 * 1024; // 15GB (Google Drive Limit)
@@ -60,6 +61,13 @@ export const getInternalGroupMessages = (): any[] => {
 const getSlots = (): DriveSlot[] => {
     const saved = localStorage.getItem('storage_slots');
     return saved ? JSON.parse(saved) : [];
+};
+
+// Helper: Get Primary Active Slot (For System Data like Announcements)
+export const getPrimaryActiveSlot = (): DriveSlot | undefined => {
+    const slots = getSlots();
+    // Prioritize connected and initialized slots
+    return slots.find(s => s.isConnected && s.isInitialized);
 };
 
 // Helper: Save slots back
@@ -148,6 +156,14 @@ export const initializeSystemSlot = async (slotId: number, userDriveLink: string
         'HÌNH ẢNH 6', 'HÌNH ẢNH 7', 'HÌNH ẢNH 8', 'HÌNH ẢNH 9', 'HÌNH ẢNH 10'
     ];
     localStorage.setItem(`sheet_hoso_${newSheetId}_headers`, JSON.stringify(hosoHeaders));
+    
+    const announcementHeaders = ['ID', 'NGÀY', 'TIÊU ĐỀ', 'NỘI DUNG', 'NGƯỜI ĐĂNG', 'LOG ĐỌC (JSON)'];
+    localStorage.setItem(`sheet_announcements_${newSheetId}_headers`, JSON.stringify(announcementHeaders));
+
+    // Initialize with some mock data IF it's the first time
+    const initialAnnouncements = MOCK_ANNOUNCEMENTS;
+    localStorage.setItem(`sheet_data_announcements_${newSheetId}`, JSON.stringify(initialAnnouncements));
+
 
     return {
         driveFolderLink: userDriveLink,
@@ -270,5 +286,69 @@ export const saveHoSoToSheet = async (
     // Update Capacity (~5KB per row metadata)
     incrementUsage(slot.id, 5 * 1024);
 
+    return true;
+};
+
+// --- SHEET 3: ANNOUNCEMENTS (NEW) ---
+export const fetchAnnouncementsFromSheet = async (): Promise<{data: Announcement[], slotName: string, slotId: number}> => {
+    const slot = getPrimaryActiveSlot();
+    if (!slot) {
+        // Fallback for demo if no config: return empty or Mocks in memory only
+        return { data: [], slotName: 'Chưa kết nối', slotId: 0 };
+    }
+
+    const key = `sheet_data_announcements_${slot.sheetId}`;
+    const storedData = localStorage.getItem(key);
+    let data: Announcement[] = [];
+
+    if (storedData) {
+        data = JSON.parse(storedData);
+    } else {
+        // Init empty or migrate mocks if desired
+        data = [];
+    }
+
+    // Simulate Network Delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    return { data, slotName: slot.name, slotId: slot.id };
+};
+
+export const saveAnnouncementToSheet = async (announcement: Announcement): Promise<boolean> => {
+    const slot = getPrimaryActiveSlot();
+    if (!slot) {
+        console.error("No active storage slot for announcements");
+        return false;
+    }
+
+    const key = `sheet_data_announcements_${slot.sheetId}`;
+    const currentData: Announcement[] = JSON.parse(localStorage.getItem(key) || '[]');
+    
+    // Add new announcement
+    const updatedData = [announcement, ...currentData];
+    localStorage.setItem(key, JSON.stringify(updatedData));
+    
+    // Increment Usage (~1KB)
+    incrementUsage(slot.id, 1024);
+    
+    console.log(`[Sheet-ANNOUNCE] Saved to Repo #${slot.id}`, announcement);
+    return true;
+};
+
+export const updateAnnouncementReadStatusInSheet = async (announcementId: string, updatedReadLog: any[]): Promise<boolean> => {
+     const slot = getPrimaryActiveSlot();
+    if (!slot) return false;
+
+    const key = `sheet_data_announcements_${slot.sheetId}`;
+    const currentData: Announcement[] = JSON.parse(localStorage.getItem(key) || '[]');
+
+    const updatedData = currentData.map(ann => {
+        if (ann.id === announcementId) {
+            return { ...ann, readLog: updatedReadLog };
+        }
+        return ann;
+    });
+
+    localStorage.setItem(key, JSON.stringify(updatedData));
     return true;
 };

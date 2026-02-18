@@ -12,18 +12,20 @@ import EmployeeManager from './components/EmployeeManager';
 import Notifications from './components/Notifications';
 import Settings from './components/Settings';
 import FloatingChat from './components/FloatingChat'; // Import Floating Chat
-import { MOCK_DOCUMENTS, MOCK_ANNOUNCEMENTS } from './constants';
+import { MOCK_DOCUMENTS } from './constants';
 import { Document, User, DefectEntry, Announcement } from './types';
-import { Plus, AlertTriangle, Settings as SettingsIcon, ClipboardList, ArrowRight } from 'lucide-react';
-import { updatePresence, setOffline } from './services/storageService';
+import { Plus, AlertTriangle, Settings as SettingsIcon, ClipboardList, ArrowRight, Loader2, Database } from 'lucide-react';
+import { updatePresence, setOffline, fetchAnnouncementsFromSheet, saveAnnouncementToSheet, updateAnnouncementReadStatusInSheet } from './services/storageService';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<string>('DASHBOARD');
   const [documents, setDocuments] = useState<Document[]>(MOCK_DOCUMENTS);
   
-  // Announcements State
-  const [announcements, setAnnouncements] = useState<Announcement[]>(MOCK_ANNOUNCEMENTS);
+  // Announcements State - Initialize Empty
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [announcementSource, setAnnouncementSource] = useState<{name: string, id: number} | null>(null);
+  const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(false);
 
   // Selection State
   const [selectedDocId, setSelectedDocId] = useState<string>(MOCK_DOCUMENTS[0].id);
@@ -70,57 +72,80 @@ const App: React.FC = () => {
       }
   };
 
-  // Check storage configuration and Missing Solutions on mount/update
-  useEffect(() => {
-     const checkSystem = () => {
-         // 1. Config Check (Revised logic for Multi-slot)
-         let hasValidConfig = false;
-         try {
-             const saved = localStorage.getItem('storage_slots');
-             if (saved) {
-                 const slots = JSON.parse(saved);
-                 // FIX: Check for 'isConnected' AND 'isInitialized' (Created Sheet/Folder)
-                 // We only need AT LEAST ONE working slot to remove the warning
-                 hasValidConfig = slots.some((s: any) => s.isConnected && s.isInitialized);
-             }
-         } catch (e) {
-             hasValidConfig = false;
-         }
+  // --- LOAD SYSTEM DATA (Announcements & Config) ---
+  const loadSystemData = async () => {
+      setIsLoadingAnnouncements(true);
+      try {
+          // 1. Check Configuration
+          let hasValidConfig = false;
+          try {
+              const saved = localStorage.getItem('storage_slots');
+              if (saved) {
+                  const slots = JSON.parse(saved);
+                  hasValidConfig = slots.some((s: any) => s.isConnected && s.isInitialized);
+              }
+          } catch (e) { hasValidConfig = false; }
+          setIsConfigMissing(!hasValidConfig);
 
-         // Update Warning Banner State
-         setIsConfigMissing(!hasValidConfig);
-
-         // Update Announcements Tab (System Alert Logic)
-         setAnnouncements(prev => {
-            const alertId = 'sys_alert_config_missing';
-            const hasAlert = prev.some(a => a.id === alertId);
-
-            if (!hasValidConfig && !hasAlert) {
-                // ADD System Alert if config missing and alert not present
-                return [{
+          // 2. Fetch Announcements from Active Slot
+          const result = await fetchAnnouncementsFromSheet();
+          
+          // System Alert Logic
+          let finalAnnouncements = result.data;
+          const alertId = 'sys_alert_config_missing';
+          
+          if (!hasValidConfig) {
+               // Inject Alert if no config
+               const alert: Announcement = {
                     id: alertId,
                     title: '⚠️ SỰ CỐ HỆ THỐNG: CHƯA CÓ KHO LƯU TRỮ',
                     content: 'Hệ thống chưa tìm thấy kết nối đến Google Drive/Sheet. Dữ liệu hiện tại chỉ được lưu tạm thời trên trình duyệt. Vui lòng vào Cấu hình để khắc phục ngay.',
                     date: new Date().toLocaleDateString('en-GB'),
                     author: 'SYSTEM ADMIN',
                     readLog: []
-                }, ...prev];
-            } else if (hasValidConfig && hasAlert) {
-                // REMOVE System Alert if config is fixed
-                return prev.filter(a => a.id !== alertId);
-            }
-            return prev;
-         });
+                };
+                // Deduplicate
+                if (!finalAnnouncements.find(a => a.id === alertId)) {
+                    finalAnnouncements = [alert, ...finalAnnouncements];
+                }
+          } else {
+               // Remove alert if config valid
+               finalAnnouncements = finalAnnouncements.filter(a => a.id !== alertId);
+          }
+
+          setAnnouncements(finalAnnouncements);
+          if (result.slotId !== 0) {
+              setAnnouncementSource({ name: result.slotName, id: result.slotId });
+          } else {
+              setAnnouncementSource(null);
+          }
+
+      } catch (error) {
+          console.error("Failed to load system data", error);
+      } finally {
+          setIsLoadingAnnouncements(false);
+      }
+  };
+
+  // Load on mount and when view changes to Settings (to refresh on exit)
+  useEffect(() => {
+      loadSystemData();
+      
+      // Polling for Config Changes (Simulating other admins changing config)
+      const interval = setInterval(loadSystemData, 5000);
+      return () => clearInterval(interval);
+  }, []);
 
 
-         // 2. Missing Solutions Check (Quét dữ liệu lỗi)
+  // Check Missing Solutions (Local Doc Logic)
+  useEffect(() => {
+     const checkSolutions = () => {
+         // Missing Solutions Check (Quét dữ liệu lỗi)
          const missing: {docId: string, docTitle: string, defectId: string, defectContent: string}[] = [];
          documents.forEach(doc => {
              if (doc.defects) {
                  doc.defects.forEach(defect => {
-                     // Check if solution is empty or essentially empty
                      if (!defect.solution || defect.solution.trim().length < 2) {
-                         // Determine content for display
                          const content = defect.song || defect.in || defect.thanhPham || defect.kho || 'Lỗi chưa xác định';
                          missing.push({
                              docId: doc.id,
@@ -135,9 +160,7 @@ const App: React.FC = () => {
          setMissingSolutions(missing);
      };
      
-     checkSystem();
-     const interval = setInterval(checkSystem, 2000); // Check every 2s for faster feedback
-     return () => clearInterval(interval);
+     checkSolutions();
   }, [documents]);
 
   // Derived state for selected document to ensure we always have the latest version
@@ -151,7 +174,6 @@ const App: React.FC = () => {
   });
 
   // Calculate notification count (UNREAD ANNOUNCEMENTS)
-  // UPDATED LOGIC FOR NEW READLOG STRUCTURE
   const unreadAnnouncementsCount = user 
       ? announcements.filter(a => !a.readLog.some(log => log.userId === user.id)).length 
       : 0;
@@ -164,7 +186,6 @@ const App: React.FC = () => {
 
   const handleAddDocument = (newDoc: Document) => {
       setDocuments(prev => [newDoc, ...prev]);
-      // If Admin is adding, select it immediately
       if (user?.role === 'ADMIN') {
         setSelectedProductKey(`${newDoc.sender}|${newDoc.title}`);
         setSelectedDocId(newDoc.id);
@@ -188,10 +209,8 @@ const App: React.FC = () => {
 
   const handleProductSelect = (sender: string, title: string) => {
       setSelectedProductKey(`${sender}|${title}`);
-      // Auto select the latest PO for this product
       const relatedDocs = documents.filter(d => d.sender === sender && d.title === title);
       if (relatedDocs.length > 0) {
-           // Sort descending date
            relatedDocs.sort((a, b) => {
               const dateA = a.date.split('/').reverse().join('');
               const dateB = b.date.split('/').reverse().join('');
@@ -201,26 +220,35 @@ const App: React.FC = () => {
       }
   };
 
-  // --- ANNOUNCEMENT HANDLERS ---
-  const handleMarkAnnouncementAsRead = (id: string) => {
+  // --- ANNOUNCEMENT HANDLERS (PERSISTENT) ---
+  const handleMarkAnnouncementAsRead = async (id: string) => {
       if (!user) return;
-      setAnnouncements(prev => prev.map(ann => {
-          // Check if already read
-          if (ann.id === id && !ann.readLog.some(log => log.userId === user.id)) {
-              // Add new log entry with timestamp
-              const newEntry = {
-                  userId: user.id,
-                  userName: user.name,
-                  timestamp: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' ' + new Date().toLocaleDateString('en-GB')
-              };
-              return { ...ann, readLog: [...ann.readLog, newEntry] };
-          }
-          return ann;
-      }));
+      
+      // Optimistic Update
+      const targetAnn = announcements.find(a => a.id === id);
+      if (targetAnn && !targetAnn.readLog.some(log => log.userId === user.id)) {
+          const newEntry = {
+              userId: user.id,
+              userName: user.name,
+              timestamp: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' ' + new Date().toLocaleDateString('en-GB')
+          };
+          
+          const updatedReadLog = [...targetAnn.readLog, newEntry];
+          
+          setAnnouncements(prev => prev.map(ann => 
+              ann.id === id ? { ...ann, readLog: updatedReadLog } : ann
+          ));
+
+          // Persist to Sheet
+          await updateAnnouncementReadStatusInSheet(id, updatedReadLog);
+      }
   };
 
-  const handleCreateAnnouncement = (ann: Announcement) => {
+  const handleCreateAnnouncement = async (ann: Announcement) => {
+      // Optimistic Update
       setAnnouncements(prev => [ann, ...prev]);
+      // Persist to Sheet
+      await saveAnnouncementToSheet(ann);
   };
 
   // 1. If not logged in, show Login Screen
@@ -262,6 +290,15 @@ const App: React.FC = () => {
               >
                   <SettingsIcon size={12}/> Cấu hình ngay
               </button>
+          </div>
+      )}
+
+      {/* STORAGE SLOT INDICATOR (If not missing config) */}
+      {!isConfigMissing && announcementSource && currentView === 'NOTIFICATIONS' && (
+          <div className="bg-blue-600 text-white px-4 py-1 text-xs font-medium flex justify-center items-center gap-2 z-[60] shadow-sm">
+             <Database size={12}/>
+             <span>Đang tải dữ liệu Thông báo từ: <strong>{announcementSource.name}</strong> (Kho #{announcementSource.id})</span>
+             {isLoadingAnnouncements && <Loader2 size={10} className="animate-spin"/>}
           </div>
       )}
 
