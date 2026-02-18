@@ -85,6 +85,19 @@ export interface Announcement {
   type?: 'general' | 'system'; // NEW: Distinguish between General News and System Alerts
 }
 
+export interface DocNotification {
+    id: string;
+    docId: string;
+    docTitle: string;
+    poCode: string;
+    sender: string; // Customer name
+    messageSender: string; // Who sent the msg
+    content: string;
+    type: 'MSG' | 'DEFECT' | 'IMAGE';
+    timestamp: string;
+    isRead: boolean;
+}
+
 export interface MobileTask {
   id: string;
   title: string; // Mục con (Tên sản phẩm)

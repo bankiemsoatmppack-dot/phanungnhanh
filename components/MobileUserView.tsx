@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User as AppUser, MobileTask, ChatMessage, Document, Announcement } from '../types';
+import { User as AppUser, MobileTask, ChatMessage, Document, Announcement, DocNotification } from '../types';
 import { MOCK_MOBILE_CHAT } from '../constants';
 import ImageViewer from './ImageViewer';
 import { compressImage, sendBrowserNotification } from '../utils';
-import { LogOut, Search, Folder, Clock, Check, ArrowLeft, Image as ImageIcon, Send, Plus, X, Calendar, User, ChevronDown, Layers, FilePlus, Lock, Key, Bell, CheckCircle } from 'lucide-react';
+import { LogOut, Search, Folder, Clock, Check, ArrowLeft, Image as ImageIcon, Send, Plus, X, Calendar, User, ChevronDown, Layers, FilePlus, Lock, Key, Bell, CheckCircle, MessageSquareWarning, MessageSquare, AlertCircle } from 'lucide-react';
 import { saveChatToSheet, assignSlotForNewDocument } from '../services/storageService';
 
 interface Props {
@@ -17,9 +17,13 @@ interface Props {
   // NEW: Props for Announcements
   announcements: Announcement[];
   onMarkAnnouncementAsRead: (id: string) => void;
+
+  // NEW: Props for Urgent Notifications
+  urgentNotifications: DocNotification[];
+  onClearUrgentNotification: (id: string) => void;
 }
 
-const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocument, onUpdateDocument, announcements, onMarkAnnouncementAsRead }) => {
+const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocument, onUpdateDocument, announcements, onMarkAnnouncementAsRead, urgentNotifications, onClearUrgentNotification }) => {
   const [activeTab, setActiveTab] = useState<'MY_ITEMS' | 'ALL'>('MY_ITEMS');
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [chatMessage, setChatMessage] = useState('');
@@ -40,6 +44,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
 
   // Notifications Modal State
   const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
+  const [isUrgentModalOpen, setIsUrgentModalOpen] = useState(false); // NEW
 
   // File Input Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,8 +58,9 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
       code: '', // Phiếu SX
   });
 
-  // Derived: Unread Announcements Count (Updated Logic for ReadLog)
+  // Derived Counts
   const unreadAnnouncementsCount = announcements.filter(a => !a.readLog.some(log => log.userId === user.id)).length;
+  const unreadUrgentCount = urgentNotifications.length;
 
   // Derived selected document
   const selectedDoc = documents.find(d => d.id === selectedDocId) || null;
@@ -78,6 +84,12 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
           chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
       }
   }, [messages, selectedDocId]);
+
+  const handleUrgentClick = (notif: DocNotification) => {
+      setSelectedDocId(notif.docId);
+      onClearUrgentNotification(notif.id);
+      setIsUrgentModalOpen(false);
+  };
 
   // --- LOGIC: GROUP DOCUMENTS & SHOW LATEST PO ---
   // 1. Group documents by "Sender|Title"
@@ -482,7 +494,21 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
              <span className="font-bold text-lg uppercase">PHẢN ỨNG NHANH</span>
            </div>
            <div className="flex items-center gap-2">
-              {/* NOTIFICATION BELL */}
+              
+              {/* URGENT NOTIFICATIONS BELL (YELLOW) */}
+              <button 
+                 onClick={() => setIsUrgentModalOpen(true)}
+                 className="relative bg-yellow-400 text-black p-1.5 rounded-full active:scale-95 transition-transform shadow-lg"
+              >
+                 <MessageSquareWarning size={18} />
+                 {unreadUrgentCount > 0 && (
+                     <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold animate-pulse">
+                         {unreadUrgentCount}
+                     </span>
+                 )}
+              </button>
+
+              {/* ANNOUNCEMENT BELL (WHITE/RED) */}
               <button 
                  onClick={() => setIsNotifModalOpen(true)}
                  className="relative bg-white/20 p-1.5 rounded-full active:scale-95 transition-transform"
@@ -635,7 +661,7 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
         <Plus size={32} />
       </button>
 
-      {/* NOTIFICATIONS MODAL (Mobile User) */}
+      {/* NOTIFICATIONS MODAL (Announcements) */}
       {isNotifModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
               <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm max-h-[80vh] flex flex-col">
@@ -670,6 +696,53 @@ const MobileUserView: React.FC<Props> = ({ user, onLogout, documents, onAddDocum
                                   </div>
                               )
                           })
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* URGENT NOTIFICATIONS MODAL (Yellow Bell) */}
+      {isUrgentModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm max-h-[80vh] flex flex-col border-2 border-yellow-400">
+                  <div className="bg-yellow-400 p-4 text-black rounded-t-lg flex justify-between items-center shrink-0">
+                      <div className="flex items-center gap-2 font-bold">
+                          <MessageSquareWarning size={20}/> Tin nhắn & Lỗi (Khẩn)
+                      </div>
+                      <button onClick={() => setIsUrgentModalOpen(false)}><X size={20}/></button>
+                  </div>
+                  <div className="p-4 overflow-y-auto space-y-3 bg-gray-50 flex-1">
+                      {urgentNotifications.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+                              <CheckCircle size={40} className="text-green-500 opacity-30 mb-2"/>
+                              <p className="text-xs">Không có tin nhắn nào cần xử lý</p>
+                          </div>
+                      ) : (
+                          urgentNotifications.map(notif => (
+                              <div 
+                                key={notif.id}
+                                onClick={() => handleUrgentClick(notif)}
+                                className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex items-start gap-3 active:bg-blue-50"
+                              >
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                                      notif.type === 'DEFECT' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
+                                  }`}>
+                                      {notif.type === 'DEFECT' ? <AlertCircle size={16}/> : <MessageSquare size={16}/>}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                      <div className="flex justify-between items-start">
+                                          <h4 className="font-bold text-xs truncate text-gray-800">{notif.docTitle}</h4>
+                                          <span className="text-[9px] text-gray-400">{notif.timestamp}</span>
+                                      </div>
+                                      <div className="text-[10px] text-gray-500 font-bold mb-1">{notif.sender} • {notif.poCode}</div>
+                                      <div className="text-xs bg-gray-50 p-2 rounded text-gray-700">
+                                          <span className="font-bold mr-1">{notif.messageSender}:</span>
+                                          {notif.content}
+                                      </div>
+                                  </div>
+                              </div>
+                          ))
                       )}
                   </div>
               </div>

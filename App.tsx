@@ -10,10 +10,11 @@ import Login from './components/Login';
 import MobileUserView from './components/MobileUserView';
 import EmployeeManager from './components/EmployeeManager';
 import Notifications from './components/Notifications';
+import UrgentNotifications from './components/UrgentNotifications'; // NEW IMPORT
 import Settings from './components/Settings';
-import GlobalToast, { ToastMessage } from './components/GlobalToast'; // NEW IMPORT
+import GlobalToast, { ToastMessage } from './components/GlobalToast'; 
 import { MOCK_DOCUMENTS } from './constants';
-import { Document, User, DefectEntry, Announcement } from './types';
+import { Document, User, DefectEntry, Announcement, DocNotification } from './types';
 import { Plus, AlertTriangle, Settings as SettingsIcon, ClipboardList, ArrowRight, Loader2, Database, BellRing } from 'lucide-react';
 import { updatePresence, setOffline, fetchAnnouncementsFromSheet, saveAnnouncementToSheet, updateAnnouncementReadStatusInSheet, deleteAnnouncementFromSheet, fetchDocumentsFromSheet, saveDocumentToSheet, deleteDocumentFromSheet, logAction } from './services/storageService';
 import { playNotificationSound } from './utils';
@@ -30,6 +31,9 @@ const App: React.FC = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   // Persistent Alert Button State (List of unread doc IDs)
   const [activeAlertDocs, setActiveAlertDocs] = useState<Set<string>>(new Set());
+
+  // NEW: PERSISTENT URGENT NOTIFICATIONS (Yellow Bell / Tab)
+  const [docNotifications, setDocNotifications] = useState<DocNotification[]>([]);
 
   // Announcements State
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -51,7 +55,7 @@ const App: React.FC = () => {
       // 0. Play Sound
       playNotificationSound();
 
-      // 1. Add Toast
+      // 1. Add Toast (Ephemeral)
       const newToast: ToastMessage = {
           id: Date.now().toString() + Math.random(),
           docId: doc.id,
@@ -62,7 +66,23 @@ const App: React.FC = () => {
       };
       setToasts(prev => [...prev, newToast]);
 
-      // 2. Add to Active Alert Button (Persistent until clicked)
+      // 2. Add to Urgent Notifications List (Persistent)
+      // This populates the Yellow Bell (User) and Urgent Tab (Admin)
+      const newUrgentNotif: DocNotification = {
+          id: Date.now().toString() + Math.random(),
+          docId: doc.id,
+          docTitle: doc.title,
+          poCode: doc.productionOrder || doc.code,
+          sender: doc.sender,
+          messageSender: sender,
+          content: content,
+          type: type === 'APPROVAL' ? 'DEFECT' : (type === 'IMAGE' ? 'IMAGE' : 'MSG'),
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isRead: false
+      };
+      setDocNotifications(prev => [newUrgentNotif, ...prev]);
+
+      // 3. Add to Active Alert Button (Legacy visual aid)
       // Only add if we are NOT currently viewing this document
       if (selectedDocId !== doc.id || currentView !== 'DOCUMENTS') {
           setActiveAlertDocs(prev => new Set(prev).add(doc.id));
@@ -81,13 +101,22 @@ const App: React.FC = () => {
           setSelectedDocId(doc.id);
           setCurrentView('DOCUMENTS');
           
-          // Remove from alerts
+          // Remove from alerts (legacy)
           setActiveAlertDocs(prev => {
               const next = new Set(prev);
               next.delete(docId);
               return next;
           });
       }
+  };
+
+  // NEW: Handle Urgent Notification Click (Admin Tab / Mobile Bell)
+  const handleUrgentNotificationClick = (docId: string, notifId: string) => {
+      // 1. Remove from list
+      setDocNotifications(prev => prev.filter(n => n.id !== notifId));
+      
+      // 2. Navigate
+      handleAlertClick(docId);
   };
 
   // --- LOAD DOCUMENTS FROM STORAGE (POLLING ENABLED) ---
@@ -400,6 +429,10 @@ const App: React.FC = () => {
       }
   };
 
+  const handleClearUrgentNotification = (id: string) => {
+      setDocNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
   if (!user) {
     return <Login onLogin={setUser} />;
   }
@@ -416,6 +449,8 @@ const App: React.FC = () => {
                 onUpdateDocument={handleUpdateDocument}
                 announcements={announcements}
                 onMarkAnnouncementAsRead={handleMarkAnnouncementAsRead}
+                urgentNotifications={docNotifications} // Pass Urgent Data
+                onClearUrgentNotification={handleClearUrgentNotification}
             />
         </>
     );
@@ -427,7 +462,7 @@ const App: React.FC = () => {
       {/* GLOBAL TOAST NOTIFICATIONS */}
       <GlobalToast toasts={toasts} onRemove={removeToast} onClick={handleAlertClick} />
 
-      {/* ALERT BUTTON (Persistent if Missed Toast) */}
+      {/* ALERT BUTTON (Persistent if Missed Toast) - LEGACY SUPPORT */}
       {activeAlertDocs.size > 0 && (
           <div className="fixed top-20 right-4 z-50 animate-bounce">
               <button 
@@ -510,6 +545,7 @@ const App: React.FC = () => {
             onLogout={handleLogout}
             role={user.role}
             notificationCount={unreadAnnouncementsCount}
+            urgentCount={docNotifications.length} // NEW
         />
 
         {/* Main Content Area */}
@@ -518,7 +554,7 @@ const App: React.FC = () => {
             {/* ADMIN VIEW 1: DASHBOARD */}
             {currentView === 'DASHBOARD' && <Dashboard />}
 
-            {/* ADMIN VIEW: NOTIFICATIONS */}
+            {/* ADMIN VIEW: NOTIFICATIONS (Announcements) */}
             {currentView === 'NOTIFICATIONS' && (
                 <Notifications 
                     user={user}
@@ -527,6 +563,14 @@ const App: React.FC = () => {
                     onCreateAnnouncement={handleCreateAnnouncement}
                     onDeleteAnnouncement={handleDeleteAnnouncement}
                     onUpdateAnnouncement={handleUpdateAnnouncement}
+                />
+            )}
+
+            {/* NEW: ADMIN VIEW: URGENT MESSAGES */}
+            {currentView === 'URGENT' && (
+                <UrgentNotifications 
+                    notifications={docNotifications}
+                    onSelectNotification={handleUrgentNotificationClick}
                 />
             )}
 

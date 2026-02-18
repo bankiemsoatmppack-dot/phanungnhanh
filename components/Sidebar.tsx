@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Home, FileText, CheckSquare, BarChart2, Settings, Users, Folder, Bell, LogOut, User as UserIcon, Lock, X } from 'lucide-react';
+import { Home, FileText, CheckSquare, BarChart2, Settings, Users, Folder, Bell, LogOut, User as UserIcon, Lock, X, MessageSquareWarning } from 'lucide-react';
 import { UserRole } from '../types';
 
 interface Props {
@@ -9,9 +9,10 @@ interface Props {
   onLogout: () => void;
   role: UserRole;
   notificationCount?: number;
+  urgentCount?: number; // NEW: Urgent Messages Count
 }
 
-const Sidebar: React.FC<Props> = ({ currentView, onChangeView, onLogout, role, notificationCount = 0 }) => {
+const Sidebar: React.FC<Props> = ({ currentView, onChangeView, onLogout, role, notificationCount = 0, urgentCount = 0 }) => {
   // Theme changes based on view
   const bgColor = currentView === 'DASHBOARD' ? 'bg-sidebar-red' : 'bg-blue-600';
   
@@ -21,8 +22,15 @@ const Sidebar: React.FC<Props> = ({ currentView, onChangeView, onLogout, role, n
   
   const menuItems = [
     { id: 'DASHBOARD', icon: Home, label: 'Dashboard' },
-    // Notification Count here now refers to Announcements (if passed properly) or we keep it as generic alerts
-    { id: 'NOTIFICATIONS', icon: Bell, label: 'Bảng tin', badge: notificationCount },
+    // NEW: Urgent Messages Tab for Admin
+    ...(role === 'ADMIN' ? [{ 
+        id: 'URGENT', 
+        icon: MessageSquareWarning, 
+        label: 'Tin nhắn & Lỗi', 
+        badge: urgentCount, 
+        badgeColor: 'bg-yellow-400 text-black animate-pulse' 
+    }] : []),
+    { id: 'NOTIFICATIONS', icon: Bell, label: 'Bảng tin', badge: notificationCount, badgeColor: 'bg-red-500 text-white' },
     { id: 'DOCUMENTS', icon: FileText, label: 'Hồ sơ' },
     { id: 'TASKS', icon: CheckSquare, label: 'Công việc' },
     { id: 'REPORTS', icon: BarChart2, label: 'Báo cáo' },
@@ -52,17 +60,17 @@ const Sidebar: React.FC<Props> = ({ currentView, onChangeView, onLogout, role, n
               currentView === item.id ? 'bg-white/20 border-r-4 border-white' : 'hover:bg-white/10'
             }`}
           >
-            <item.icon size={24} />
+            <item.icon size={24} className={currentView === item.id ? 'text-white' : 'text-white/80'} />
             
             {/* Notification Badge */}
             {item.badge ? (
-                <span className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold ring-2 ring-white">
-                    {item.badge}
+                <span className={`absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ring-2 ring-white ${item.badgeColor || 'bg-red-500 text-white'}`}>
+                    {item.badge > 9 ? '9+' : item.badge}
                 </span>
             ) : null}
 
             {/* Tooltip */}
-            <span className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 pointer-events-none transition-opacity">
+            <span className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 pointer-events-none transition-opacity shadow-lg">
                 {item.label}
             </span>
           </button>
