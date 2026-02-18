@@ -92,3 +92,23 @@ export const compressImage = (file: File): Promise<string> => {
       const allowedPositions: UserPosition[] = ['DEPUTY_DIRECTOR', 'QA_MANAGER', 'PROD_MANAGER'];
       return allowedPositions.includes(user.position);
   };
+
+  // --- SOUND NOTIFICATION ---
+  export const playNotificationSound = () => {
+      // Short "Ting" sound (Base64 encoded MP3)
+      const sound = "data:audio/mp3;base64,SUQzBAAAAAABAFRYWFgAAAASAAADbWFqb3JfYnJhbmQAbXA0MgBUWFhYAAAAEQAAA21pbm9yX3ZlcnNpb24AMABUWFhYAAAAHAAAA2NvbXBhdGlibGVfYnJhbmRzAGlzb21tcDQyAFRTU0UAAAAPAAADTGF2ZjU3LjU2LjEwMAAAAAAAAAAAAAAA//uQZAAAAAAAABAAAAAAAAAAAAJAAABBAAAAAAAAAAAAAAAA/+5BkAA/wAABAAAAABAAAAABAAAAATAAABAAAAAAAAAAAAAAAAABT//7kGQAAmAAAEAAAAAEAAAAAEAAAAEwAAAQAAAAAAAAAAAAAAAAAU//+5BkAA/wAABAAAAABAAAAABAAAABMAAAEAAAAAAAAAAAAAAAAAFP//uQZAAO8AAAQAAAAAQAAAAAQAAAAHAAABAAAAAAAAAAAAAAAAABQ=";
+      // Note: The above is a placeholder very short header. 
+      // Using a real simple bell sound base64 below:
+      const bellSound = "data:audio/wav;base64,UklGRl9vT1BXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU"; 
+      
+      // Better quality "Ding" (Glass Ping)
+      const audioSrc = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
+      
+      try {
+          const audio = new Audio(audioSrc);
+          audio.volume = 0.5;
+          audio.play().catch(e => console.log("Audio play blocked (user interaction required first):", e));
+      } catch (e) {
+          console.error("Audio error", e);
+      }
+  };

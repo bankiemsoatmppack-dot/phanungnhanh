@@ -11,12 +11,12 @@ import MobileUserView from './components/MobileUserView';
 import EmployeeManager from './components/EmployeeManager';
 import Notifications from './components/Notifications';
 import Settings from './components/Settings';
-import FloatingChat from './components/FloatingChat';
 import GlobalToast, { ToastMessage } from './components/GlobalToast'; // NEW IMPORT
 import { MOCK_DOCUMENTS } from './constants';
 import { Document, User, DefectEntry, Announcement } from './types';
 import { Plus, AlertTriangle, Settings as SettingsIcon, ClipboardList, ArrowRight, Loader2, Database, BellRing } from 'lucide-react';
 import { updatePresence, setOffline, fetchAnnouncementsFromSheet, saveAnnouncementToSheet, updateAnnouncementReadStatusInSheet, deleteAnnouncementFromSheet, fetchDocumentsFromSheet, saveDocumentToSheet, deleteDocumentFromSheet, logAction } from './services/storageService';
+import { playNotificationSound } from './utils';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -48,6 +48,9 @@ const App: React.FC = () => {
 
   // --- NOTIFICATION LOGIC ---
   const handleNewNotification = (doc: Document, type: 'TEXT' | 'IMAGE' | 'APPROVAL', content: string, sender: string) => {
+      // 0. Play Sound
+      playNotificationSound();
+
       // 1. Add Toast
       const newToast: ToastMessage = {
           id: Date.now().toString() + Math.random(),
@@ -93,10 +96,19 @@ const App: React.FC = () => {
           const fetchedDocs = await fetchDocumentsFromSheet();
           
           // --- REAL-TIME COMPARISON LOGIC ---
-          if (!isInitialLoad && user?.role === 'ADMIN') {
+          // ENABLED FOR EVERYONE (Admin & User)
+          if (!isInitialLoad && user) {
               fetchedDocs.forEach(newDoc => {
                   const oldDoc = prevDocumentsRef.current.find(d => d.id === newDoc.id);
-                  if (!oldDoc) return; // New document created, maybe notify? Skipping for now.
+                  
+                  // 0. NEW DOCUMENT DETECTED
+                  if (!oldDoc) {
+                      // Skip notification if it was created by me just now
+                      if (newDoc.handler !== user.name) {
+                          handleNewNotification(newDoc, 'TEXT', 'Hồ sơ mới vừa được tạo', newDoc.sender);
+                      }
+                      return;
+                  }
 
                   // 1. Check for New Messages
                   const newMsgCount = newDoc.messages?.length || 0;
@@ -119,8 +131,6 @@ const App: React.FC = () => {
                                   content = 'Đã gửi hình ảnh';
                               }
 
-                              // Check if this specific message triggered an approval (Red Alert)
-                              // Optimization: We check approval items count below, but here we can check if message HAS images, usually urgent
                               handleNewNotification(newDoc, type, content, msg.sender);
                           }
                       });
@@ -159,7 +169,7 @@ const App: React.FC = () => {
               return prevDocs;
           });
           
-          if (isInitialLoad && fetchedDocs.length > 0 && !selectedDocId) {
+          if (isInitialLoad && fetchedDocs.length > 0 && !selectedDocId && user?.role === 'ADMIN') {
               const first = fetchedDocs[0];
               setSelectedProductKey(`${first.sender}|${first.title}`);
               setSelectedDocId(first.id);
@@ -397,6 +407,7 @@ const App: React.FC = () => {
   if (user.role === 'USER') {
     return (
         <>
+            <GlobalToast toasts={toasts} onRemove={removeToast} onClick={handleAlertClick} />
             <MobileUserView 
                 user={user} 
                 onLogout={handleLogout} 
@@ -406,7 +417,6 @@ const App: React.FC = () => {
                 announcements={announcements}
                 onMarkAnnouncementAsRead={handleMarkAnnouncementAsRead}
             />
-            <FloatingChat user={user} />
         </>
     );
   }
@@ -579,8 +589,6 @@ const App: React.FC = () => {
                     </div>
                 </div>
             )}
-
-            <FloatingChat user={user} />
         </div>
       </div>
 
